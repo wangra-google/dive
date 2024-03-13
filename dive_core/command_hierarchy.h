@@ -221,6 +221,7 @@ public:
     bool             GetRegFieldNodeIsCe(uint64_t node_index) const;
     SyncType         GetSyncNodeSyncType(uint64_t node_index) const;
     SyncInfo         GetSyncNodeSyncInfo(uint64_t node_index) const;
+    RenderMarkerType GetRenderMarkerNodeType(uint64_t node_index) const;
     bool             HasVulkanMarkers() const { return m_has_vulkan_marker; }
 
     // GetEventIndex returns sequence number for Event/Sync Nodes, 0 if not exist.
@@ -242,6 +243,7 @@ private:
 
     static const uint8_t kMaxNumIbsBits = 6;
     static_assert((1 << kMaxNumIbsBits) >= EmulatePM4::kMaxNumIbsPerSubmit, "Not enough bits!");
+    static const uint16_t kInvalidPerfettoIndex = UINT16_MAX;
 
     union AuxInfo
     {
@@ -270,7 +272,15 @@ private:
         struct
         {
             uint32_t m_event_id;
+            uint16_t m_perfetto_slice_id;
+            uint16_t m_reserved;
         } event_node;
+
+        struct
+        {
+            RenderMarkerType m_type;
+            uint16_t         m_perfetto_slice_id;
+        } render_marker_node;
 
         struct
         {
@@ -291,7 +301,8 @@ private:
             SyncInfo m_sync_info;
         } sync_node;
 
-        uint64_t m_u64All;
+        uint64_t m_u64All_0;
+        uint64_t m_u64All_1;
 
         AuxInfo(uint64_t val);
         static AuxInfo SubmitNode(Dive::EngineType engine_type, uint32_t submit_index);
@@ -301,9 +312,11 @@ private:
                               bool     fully_captured);
         static AuxInfo PacketNode(uint64_t addr, uint8_t opcode, uint8_t ib_level);
         static AuxInfo RegFieldNode(bool is_ce_packet);
-        static AuxInfo EventNode(uint32_t event_id);
+        static AuxInfo EventNode(uint32_t event_id, uint16_t perfetto_id = kInvalidPerfettoIndex);
         static AuxInfo MarkerNode(MarkerType type, uint32_t id = 0);
         static AuxInfo SyncNode(SyncType type, SyncInfo sync_info);
+        static AuxInfo RenderMarkerNode(RenderMarkerType type,
+                                        uint16_t         perfetto_id = kInvalidPerfettoIndex);
     };
     static_assert(sizeof(AuxInfo) == sizeof(uint64_t), "Unexpected size!");
 
@@ -482,8 +495,6 @@ private:
                      char                     *metadata_ptr = nullptr,
                      uint32_t                  metadata_size = 0);
 
-    void AppendEventNodeIndex(uint64_t node_index);
-
     void     AddChild(CommandHierarchy::TopologyType type,
                       uint64_t                       node_index,
                       uint64_t                       child_node_index);
@@ -513,6 +524,8 @@ private:
                                   uint32_t              submit_index,
                                   uint32_t              value_count_per_row);
 
+    uint16_t GetAndIncrementPerfettoSliceCount() { return m_perfetto_slice_count++; }
+
     struct Packets
     {
         std::vector<uint64_t> m_packet_node_indices;  // Packets added since last event
@@ -538,11 +551,6 @@ private:
     CommandHierarchy  *m_command_hierarchy_ptr = nullptr;  // Pointer to class being created
     const CaptureData *m_capture_data_ptr = nullptr;
 
-    // Parsing State
-    std::vector<uint64_t>
-    m_cmd_begin_packet_node_indices;  // Potential packets node for vkBeginCommandBuffer
-    std::vector<uint64_t>
-    m_cmd_begin_event_node_indices;  // Potential event node for vkBeginCommandBuffer
     static constexpr uint64_t kInvalidRenderMarkerIndex = UINT64_MAX;
     uint64_t m_render_marker_index = kInvalidRenderMarkerIndex;  // Current render marker index,
                                                                  // there is no nested render
@@ -560,6 +568,10 @@ private:
     // Cache the most recent cp_set_draw_state node, to append IBs to later
     SetDrawStateGroupInfo m_group_info[EmulatePM4::kMaxPendingIbs] = {};
     uint32_t              m_group_info_size = 0;
+
+    // Is Uused to correlate with perfetto capture, need to reset for each submit
+    uint16_t m_perfetto_slice_count = 0;
+    bool     m_binning_pass = false;
 
     uint32_t m_num_events = 0;  // Number of events so far
     Packets  m_packets;         // Packets added since last event

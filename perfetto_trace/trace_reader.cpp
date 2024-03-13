@@ -33,25 +33,6 @@ TraceReader::TraceReader(const std::string& trace_file_path) :
 {
 }
 
-bool TraceReader::LoadTraceFile()
-{
-    std::function<void(uint64_t parsed_size)> pf = [](uint64_t parsed_size) {
-        std::cout << "Read " << parsed_size << std::endl;
-    };
-    auto res = ptp::ReadTrace(m_trace_processor.get(), m_trace_file_path.c_str(), pf);
-    if (!res.ok())
-    {
-        std::cout << "Failed to load trace file" << m_trace_file_path << std::endl;
-        return false;
-    }
-#ifndef NDEBUG
-    std::vector<SubmissionData> submission_data;
-    std::vector<SurfaceData>    surface_data;
-    PopulatePerfettoTraceData(submission_data, surface_data);
-#endif
-    return true;
-}
-
 bool TraceReader::LoadTraceFileFromBuffer(const std::vector<uint8_t>& data)
 {
     size_t             data_size = data.size();
@@ -63,6 +44,16 @@ bool TraceReader::LoadTraceFileFromBuffer(const std::vector<uint8_t>& data)
 bool TraceReader::PopulatePerfettoTraceData(std::vector<SubmissionData>& submission_data,
                                             std::vector<SurfaceData>&    surface_data)
 {
+    std::function<void(uint64_t parsed_size)> pf = [](uint64_t parsed_size) {
+        std::cout << "Read " << parsed_size << std::endl;
+    };
+    auto res = ptp::ReadTrace(m_trace_processor.get(), m_trace_file_path.c_str(), pf);
+    if (!res.ok())
+    {
+        std::cout << "Failed to load trace file" << m_trace_file_path << std::endl;
+        return false;
+    }
+
     GpuSliceDataParser sp(std::move(m_trace_processor));
     submission_data = sp.ParseSubmissionData();
 

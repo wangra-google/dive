@@ -56,6 +56,12 @@ include_directories(
 "${CMAKE_SOURCE_DIR}/third_party/grpc/include"
 "${CMAKE_SOURCE_DIR}/third_party/grpc/third_party/protobuf/src/"
 )
+
+include_directories(${LibArchive_INCLUDE_DIRS} 
+  "${THIRDPARTY_DIRECTORY}/perfetto/" 
+  "${THIRDPARTY_DIRECTORY}/perfetto/include"
+  ${PERFETTO_BUILD_HEADER_DIR})
+
 # Tell CMake to create the Dive executable
 add_executable(${PROJECT_NAME} WIN32 ${HDR_FILES} ${SRC_FILES} ${COMMON_HDR_FILES} ${COMMON_SRC_FILES} resources.qrc)
 

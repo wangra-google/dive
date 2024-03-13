@@ -107,6 +107,15 @@ enum class QueueType : uint8_t {
     kCount
 };
 
+// Specifies the type of the render marker
+enum class RenderMarkerType : uint8_t {
+    kBinning,
+    kTileRender,
+    kResolve,
+    kDirectRender,
+    kCount
+};
+
 //--------------------------------------------------------------------------------------------------
 struct BlockInfo
 {

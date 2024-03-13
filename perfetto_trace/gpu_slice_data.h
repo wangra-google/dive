@@ -23,8 +23,8 @@
 #include <type_traits>
 #include <vector>
 
-#include "include/perfetto/trace_processor/trace_processor.h"
 #include "perfetto/trace_processor/basic_types.h"
+#include "perfetto/trace_processor/trace_processor.h"
 
 namespace Dive
 {

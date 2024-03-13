@@ -395,6 +395,15 @@ SyncInfo CommandHierarchy::GetSyncNodeSyncInfo(uint64_t node_index) const
 }
 
 //--------------------------------------------------------------------------------------------------
+RenderMarkerType CommandHierarchy::GetRenderMarkerNodeType(uint64_t node_index) const
+{
+    DIVE_ASSERT(node_index < m_nodes.m_aux_info.size());
+    DIVE_ASSERT(m_nodes.m_node_type[node_index] == Dive::NodeType::kRenderMarkerNode);
+    const AuxInfo &info = m_nodes.m_aux_info[node_index];
+    return info.render_marker_node.m_type;
+}
+
+//--------------------------------------------------------------------------------------------------
 uint64_t CommandHierarchy::AddNode(NodeType           type,
                                    const std::string &desc,
                                    AuxInfo            aux_info,
@@ -446,7 +455,7 @@ uint64_t CommandHierarchy::Nodes::AddNode(NodeType           type,
 // =================================================================================================
 CommandHierarchy::AuxInfo::AuxInfo(uint64_t val)
 {
-    m_u64All = val;
+    m_u64All_0 = m_u64All_1 = val;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -498,10 +507,12 @@ CommandHierarchy::AuxInfo CommandHierarchy::AuxInfo::RegFieldNode(bool is_ce_pac
 }
 
 //--------------------------------------------------------------------------------------------------
-CommandHierarchy::AuxInfo CommandHierarchy::AuxInfo::EventNode(uint32_t event_id)
+CommandHierarchy::AuxInfo CommandHierarchy::AuxInfo::EventNode(uint32_t event_id,
+                                                               uint16_t perfetto_id)
 {
     AuxInfo info(0);
     info.event_node.m_event_id = event_id;
+    info.event_node.m_perfetto_slice_id = perfetto_id;
     return info;
 }
 
@@ -520,6 +531,16 @@ CommandHierarchy::AuxInfo CommandHierarchy::AuxInfo::SyncNode(SyncType type, Syn
     AuxInfo info(0);
     info.sync_node.m_sync_type = (uint32_t)type;
     info.sync_node.m_sync_info = sync_info;
+    return info;
+}
+
+//--------------------------------------------------------------------------------------------------
+CommandHierarchy::AuxInfo CommandHierarchy::AuxInfo::RenderMarkerNode(RenderMarkerType type,
+                                                                      uint16_t         perfetto_id)
+{
+    AuxInfo info(0);
+    info.render_marker_node.m_type = type;
+    info.render_marker_node.m_perfetto_slice_id = perfetto_id;
     return info;
 }
 
@@ -785,8 +806,6 @@ bool CommandHierarchyCreator::OnIbStart(uint32_t                  submit_index,
     AddChild(CommandHierarchy::kSubmitTopology, parent_node_index, ib_node_index);
 
     m_ib_stack.push_back(ib_node_index);
-    m_cmd_begin_packet_node_indices.clear();
-    m_cmd_begin_event_node_indices.clear();
     return true;
 }
 
@@ -810,8 +829,6 @@ bool CommandHierarchyCreator::OnIbEnd(uint32_t                  submit_index,
     }
 
     m_ib_stack.pop_back();
-    m_cmd_begin_packet_node_indices.clear();
-    m_cmd_begin_event_node_indices.clear();
     m_cur_ib_level = ib_info.m_ib_level;
     return true;
 }
@@ -858,9 +875,6 @@ bool CommandHierarchyCreator::OnPacket(const IMemoryManager &mem_manager,
     {
         // Cache all packets added (will cache until encounter next event/IB)
         m_packets.Add(opcode, va_addr, packet_node_index);
-
-        // Cache packets that may be part of the vkBeginCommandBuffer.
-        m_cmd_begin_packet_node_indices.push_back(packet_node_index);
     }
 
     // Cache set_draw_state packet
@@ -885,15 +899,37 @@ bool CommandHierarchyCreator::OnPacket(const IMemoryManager &mem_manager,
             uint32_t    event_id = m_num_events++;
 
             CommandHierarchy::AuxInfo aux_info = CommandHierarchy::AuxInfo::EventNode(event_id);
+
+            if (IsBlitEvent(mem_manager, submit_index, va_addr, opcode))
+            {
+                bool     valid_slice = false;
+                uint32_t rb_blit_info_reg_offset = GetRegOffsetByName("RB_BLIT_INFO");
+                if (m_state_tracker.IsRegSet(rb_blit_info_reg_offset))
+                {
+                    RB_BLIT_INFO rb_blit_info;
+                    rb_blit_info.u32All = m_state_tracker.GetRegValue(rb_blit_info_reg_offset);
+                    bool valid_unresolve = (rb_blit_info.bitfields.GMEM != 0) &&
+                                           (rb_blit_info.bitfields.CLEAR_MASK != 0);
+                    bool valid_resolve = (rb_blit_info.bitfields.GMEM == 0) &&
+                                         (rb_blit_info.bitfields.CLEAR_MASK == 0);
+                    valid_slice = valid_unresolve || valid_resolve;
+                }
+
+                const bool has_perfetto_slice = (!m_binning_pass) && valid_slice;
+                if (has_perfetto_slice)
+                {
+                    aux_info = CommandHierarchy::AuxInfo::
+                    EventNode(event_id, GetAndIncrementPerfettoSliceCount());
+                }
+            }
+
             uint64_t draw_dispatch_node_index = AddNode(NodeType::kDrawDispatchBlitNode,
                                                         draw_dispatch_node_string,
                                                         aux_info);
-            AppendEventNodeIndex(draw_dispatch_node_index);
+            m_command_hierarchy_ptr->m_nodes.m_event_node_indices.push_back(
+            draw_dispatch_node_index);
             event_node_index = draw_dispatch_node_index;
         }
-
-        // Cache nodes that may be part of the vkBeginCommandBuffer.
-        m_cmd_begin_event_node_indices.push_back(event_node_index);
 
         // Add as children all packets that have been processed since the last event
         // Note: Events only show up in the event topology and internal RGP topology.
@@ -945,23 +981,32 @@ bool CommandHierarchyCreator::OnPacket(const IMemoryManager &mem_manager,
         DIVE_ASSERT((packet.u32All0 & 0x100) == 0);
         a6xx_marker marker = static_cast<a6xx_marker>(packet.u32All0 & 0xf);
 
-        std::string desc;
-        bool        add_child = true;
+        std::string               desc;
+        bool                      add_child = true;
+        CommandHierarchy::AuxInfo aux_info(0);
+        m_binning_pass = false;
         switch (marker)
         {
             // This is emitted at the begining of the render pass if tiled rendering mode is
             // disabled
         case RM6_BYPASS:
             desc = "Direct Rendering Pass";
+            aux_info = CommandHierarchy::AuxInfo::
+            RenderMarkerNode(RenderMarkerType::kDirectRender, GetAndIncrementPerfettoSliceCount());
             break;
             // This is emitted at the begining of the binning pass, although the binning pass
             // could be missing even in tiled rendering mode
         case RM6_BINNING:
             desc = "Binning Pass";
+            aux_info = CommandHierarchy::AuxInfo::
+            RenderMarkerNode(RenderMarkerType::kBinning, GetAndIncrementPerfettoSliceCount());
+            m_binning_pass = true;
             break;
             // This is emitted at the begining of the tiled rendering pass
         case RM6_GMEM:
             desc = "Tile Rendering Pass";
+            aux_info = CommandHierarchy::AuxInfo::
+            RenderMarkerNode(RenderMarkerType::kTileRender, GetAndIncrementPerfettoSliceCount());
             break;
             // This is emitted at the end of the tiled rendering pass
         case RM6_ENDVIS:
@@ -988,7 +1033,7 @@ bool CommandHierarchyCreator::OnPacket(const IMemoryManager &mem_manager,
 
         if (add_child)
         {
-            m_render_marker_index = AddNode(NodeType::kRenderMarkerNode, desc, 0);
+            m_render_marker_index = AddNode(NodeType::kRenderMarkerNode, desc, aux_info);
             AddChild(CommandHierarchy::kAllEventTopology,
                      m_cur_submit_node_index,
                      m_render_marker_index);
@@ -1043,6 +1088,8 @@ void CommandHierarchyCreator::OnSubmitStart(uint32_t submit_index, const SubmitI
     m_cur_ib_packet_node_index = UINT64_MAX;
     m_ib_stack.clear();
     m_render_marker_index = kInvalidRenderMarkerIndex;
+    m_perfetto_slice_count = 0;
+    m_binning_pass = false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -1093,6 +1140,10 @@ void CommandHierarchyCreator::OnSubmitEnd(uint32_t submit_index, const SubmitInf
     // Insert present node to event topology, when appropriate
     if (m_capture_data_ptr != nullptr)
     {
+        for (const auto &submission : m_capture_data_ptr->GetPerfettoSubmissionData())
+        {
+            DIVE_ASSERT(submission.m_data.size() == m_perfetto_slice_count);
+        }
         for (uint32_t i = 0; i < m_capture_data_ptr->GetNumPresents(); ++i)
         {
             const PresentInfo &present_info = m_capture_data_ptr->GetPresentInfo(i);
@@ -1156,110 +1207,7 @@ uint64_t CommandHierarchyCreator::AddPacketNode(const IMemoryManager &mem_manage
         uint64_t packet_node_index = AddNode(NodeType::kPacketNode,
                                              packet_string_stream.str(),
                                              aux_info);
-        /*
-        if (type7_header.opcode == Pal::Gfx9::IT_SET_CONTEXT_REG)
-        {
-            // Note: IT_SET_CONTEXT_REG_INDEX does not appear to be used in the driver
-            uint32_t start = Pal::Gfx9::CONTEXT_SPACE_START;
-            uint32_t end = Pal::Gfx9::Gfx09_10::CONTEXT_SPACE_END;
-            AppendRegNodes(mem_manager, submit_index, va_addr, start, end, header,
-        packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_CONTEXT_REG_RMW)
-        {
-            AppendContextRegRmwNodes(mem_manager, submit_index, va_addr, header, packet_node_index);
-        }
-        else if ((type7_header.opcode == Pal::Gfx9::IT_SET_UCONFIG_REG) ||
-                (type7_header.opcode == Pal::Gfx9::IT_SET_UCONFIG_REG_INDEX))
-        {
-            uint32_t start = Pal::Gfx9::UCONFIG_SPACE_START;
-            uint32_t end = Pal::Gfx9::UCONFIG_SPACE_END;
-            AppendRegNodes(mem_manager, submit_index, va_addr, start, end, header,
-        packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_SET_CONFIG_REG)
-        {
-            uint32_t start = Pal::Gfx9::CONFIG_SPACE_START;
-            uint32_t end = Pal::Gfx9::CONFIG_SPACE_END;
-            AppendRegNodes(mem_manager, submit_index, va_addr, start, end, header,
-        packet_node_index);
-        }
-        else if ((type7_header.opcode == Pal::Gfx9::IT_SET_SH_REG) ||
-                (type7_header.opcode == Pal::Gfx9::IT_SET_SH_REG_INDEX))
-        {
-            uint32_t start = Pal::Gfx9::PERSISTENT_SPACE_START;
-            uint32_t end = Pal::Gfx9::PERSISTENT_SPACE_END;
-            AppendRegNodes(mem_manager, submit_index, va_addr, start, end, header,
-        packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_INDIRECT_BUFFER_CNST)
-        {
-            // IT_INDIRECT_BUFFER_CNST aliases IT_COND_INDIRECT_BUFFER_CNST, but have different
-            // packet formats. So need to handle them manually.
-            AppendIBFieldNodes("INDIRECT_BUFFER_CNST",
-                            mem_manager,
-                            submit_index,
-                            va_addr,
-                            is_ce_packet,
-                            header,
-                            packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_INDIRECT_BUFFER)
-        {
-            // IT_INDIRECT_BUFFER aliases IT_COND_INDIRECT_BUFFER, but have different packet
-            // formats. So need to handle them manually.
-            AppendIBFieldNodes("INDIRECT_BUFFER",
-                            mem_manager,
-                            submit_index,
-                            va_addr,
-                            is_ce_packet,
-                            header,
-                            packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_LOAD_UCONFIG_REG ||
-                type7_header.opcode == Pal::Gfx9::IT_LOAD_CONTEXT_REG ||
-                type7_header.opcode == Pal::Gfx9::IT_LOAD_SH_REG)
-        {
-            uint32_t reg_space_start = Pal::Gfx9::UCONFIG_SPACE_START;
-            if (type7_header.opcode == Pal::Gfx9::IT_LOAD_CONTEXT_REG)
-                reg_space_start = Pal::Gfx9::CONTEXT_SPACE_START;
-            if (type7_header.opcode == Pal::Gfx9::IT_LOAD_SH_REG)
-                reg_space_start = Pal::Gfx9::PERSISTENT_SPACE_START;
-            AppendLoadRegNodes(mem_manager,
-                            submit_index,
-                            va_addr,
-                            reg_space_start,
-                            header,
-                            packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_LOAD_CONTEXT_REG_INDEX ||
-                type7_header.opcode == Pal::Gfx9::IT_LOAD_SH_REG_INDEX)
-        {
-            uint32_t reg_space_start = (type7_header.opcode == Pal::Gfx9::IT_LOAD_CONTEXT_REG_INDEX)
-        ? Pal::Gfx9::CONTEXT_SPACE_START : Pal::Gfx9::PERSISTENT_SPACE_START;
-            AppendLoadRegIndexNodes(mem_manager,
-                                    submit_index,
-                                    va_addr,
-                                    reg_space_start,
-                                    header,
-                                    packet_node_index);
-        }
-        else if (type7_header.opcode == Pal::Gfx9::IT_EVENT_WRITE)
-        {
-            // Event field is special case because there are 2 or 4 DWORD variants of this packet
-            // Also, the event_type field is not enumerated in the header, so have to enumerate
-            // manually
-            const PacketInfo *packet_info_ptr = GetPacketInfo(type7_header.opcode);
-            DIVE_ASSERT(packet_info_ptr != nullptr);
-            AppendEventWriteFieldNodes(mem_manager,
-                                    submit_index,
-                                    va_addr,
-                                    header,
-                                    packet_info_ptr,
-                                    packet_node_index);
-        }
-        else
-        */
+
         if (type7_header.opcode == CP_CONTEXT_REG_BUNCH)
         {
             AppendRegNodes(mem_manager,
@@ -2287,12 +2235,6 @@ uint64_t CommandHierarchyCreator::AddNode(NodeType                  type,
         m_node_children[i][1].resize(m_node_children[i][1].size() + 1);
     }
     return node_index;
-}
-
-//--------------------------------------------------------------------------------------------------
-void CommandHierarchyCreator::AppendEventNodeIndex(uint64_t node_index)
-{
-    m_command_hierarchy_ptr->m_nodes.m_event_node_indices.push_back(node_index);
 }
 
 //--------------------------------------------------------------------------------------------------
