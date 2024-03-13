@@ -27,6 +27,9 @@
 #include "dive_core/common/memory_manager_base.h"
 #include "log.h"
 #include "progress_tracker.h"
+#if defined(DIVE_ENABLE_PERFETTO)
+#    include "perfetto_trace/trace_reader.h"
+#endif
 
 // Forward declarations
 struct SqttFileChunkAsicInfo;
@@ -363,6 +366,10 @@ public:
         return m_vulkan_metadata_header;
     }
     const std::vector<SubmitInfo> &GetSubmits() const;
+#if defined(DIVE_ENABLE_PERFETTO)
+    const std::vector<SubmissionData> &GetPerfettoSubmissionData() const;
+    const std::vector<SurfaceData>    &GetPerfettoSurfaceData() const;
+#endif
 
     CaptureData &operator=(CaptureData &&) = default;
 
@@ -409,6 +416,8 @@ private:
     std::vector<PresentInfo>       m_presents;  // More than 1 if multi-frame capture
     std::vector<RingInfo>          m_rings;
     std::vector<TextInfo>          m_text;
+    std::vector<SubmissionData>    m_submission_data;
+    std::vector<SurfaceData>       m_surface_data;
     WaveInfo                       m_waves;
     RegisterInfo                   m_registers;
     VulkanMetadataBlockHeader      m_vulkan_metadata_header;

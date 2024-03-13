@@ -99,3 +99,8 @@ target_link_libraries(capture_fuzzer_loader
             ${PEFFETTO_TRACE_READER_LIB}
             )
 endif()
+
+include_directories(${LibArchive_INCLUDE_DIRS} 
+  "${THIRDPARTY_DIRECTORY}/perfetto/" 
+  "${THIRDPARTY_DIRECTORY}/perfetto/include"
+  ${PERFETTO_BUILD_HEADER_DIR})

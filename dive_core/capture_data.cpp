@@ -26,9 +26,6 @@
 #include "dive_core/command_hierarchy.h"
 #include "dive_core/common/common.h"
 #include "freedreno_dev_info.h"
-#if defined(DIVE_ENABLE_PERFETTO)
-#    include "perfetto_trace/trace_reader.h"
-#endif
 #include "pm4_info.h"
 
 namespace Dive
@@ -966,7 +963,7 @@ CaptureData::LoadResult CaptureData::LoadPerfettoFile(const char *file_name)
 {
     std::string name(file_name);
     TraceReader reader(name);
-    if (reader.LoadTraceFile())
+    if (reader.PopulatePerfettoTraceData(m_submission_data, m_surface_data))
     {
         return LoadResult::kSuccess;
     }
@@ -1187,6 +1184,18 @@ const SubmitInfo &CaptureData::GetSubmitInfo(uint32_t submit_index) const
 const std::vector<SubmitInfo> &CaptureData::GetSubmits() const
 {
     return m_submits;
+}
+
+//--------------------------------------------------------------------------------------------------
+const std::vector<SubmissionData> &CaptureData::GetPerfettoSubmissionData() const
+{
+    return m_submission_data;
+}
+
+//--------------------------------------------------------------------------------------------------
+const std::vector<SurfaceData> &CaptureData::GetPerfettoSurfaceData() const
+{
+    return m_surface_data;
 }
 
 //--------------------------------------------------------------------------------------------------
