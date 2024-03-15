@@ -25,7 +25,6 @@ class Settings
 public:
     enum DisplayUnit : uint32_t
     {
-        kCycle,
         kMs,
         kUs,
         kNs

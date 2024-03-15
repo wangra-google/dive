@@ -27,13 +27,16 @@
 RulerGraphicsItem::RulerGraphicsItem()
 {
     m_width = 0;
-    m_max_cycles = 0;
+    m_visible_start = 0;
+    m_visible_width = 0;
+    m_range = 0;
+    m_text_step = 0.0;
 }
 
 //--------------------------------------------------------------------------------------------------
-void RulerGraphicsItem::SetMaxCycles(uint64_t max_cycles)
+void RulerGraphicsItem::SetRange(uint64_t range)
 {
-    m_max_cycles = max_cycles;
+    m_range = range;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -55,7 +58,7 @@ void RulerGraphicsItem::SetWidth(uint64_t width)
 //--------------------------------------------------------------------------------------------------
 void RulerGraphicsItem::SetVisibleRange(int64_t scene_x, int64_t width)
 {
-    if (m_max_cycles == 0)
+    if (m_range == 0)
         return;
 
     // Convert to local item coordinate
@@ -64,29 +67,29 @@ void RulerGraphicsItem::SetVisibleRange(int64_t scene_x, int64_t width)
     m_visible_start = item_x;
     m_visible_width = width;
 
-    m_text_step = DetermineTextStepSize(m_max_cycles, m_width, m_visible_width);
+    m_text_step = DetermineTextStepSize(m_range, m_width, m_visible_width);
 }
 
 //--------------------------------------------------------------------------------------------------
-int64_t RulerGraphicsItem::MapToCycle(int64_t scene_x)
+int64_t RulerGraphicsItem::MapToTimeRange(int64_t scene_x)
 {
     double item_x = mapFromScene(scene_x, 0).x();
-    double item_coord_to_cycle = (double)m_max_cycles / m_width;
-    return item_coord_to_cycle * item_x;
+    double item_coord_to_time_range = (double)m_range / m_width;
+    return item_coord_to_time_range * item_x;
 }
 
 //--------------------------------------------------------------------------------------------------
 int64_t RulerGraphicsItem::MapToScene(int64_t cycle)
 {
-    double cycle_to_item_coord = (double)m_width / m_max_cycles;
-    double item_x = cycle_to_item_coord * cycle;
+    double time_range_to_item_coord = (double)m_width / m_range;
+    double item_x = time_range_to_item_coord * cycle;
     return mapToScene(QPoint(item_x, 0)).x();
 }
 
 //--------------------------------------------------------------------------------------------------
-uint64_t RulerGraphicsItem::GetCyclesVisible(uint64_t visible_width, uint64_t ruler_width) const
+uint64_t RulerGraphicsItem::GetTimeRangeVisible(uint64_t visible_width, uint64_t ruler_width) const
 {
-    return ((double)m_max_cycles / ruler_width) * visible_width;
+    return ((double)m_range / ruler_width) * visible_width;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -104,11 +107,11 @@ QPainterPath RulerGraphicsItem::shape() const
 }
 
 //--------------------------------------------------------------------------------------------------
-void RulerGraphicsItem::paint(QPainter *                      painter,
+void RulerGraphicsItem::paint(QPainter                       *painter,
                               const QStyleOptionGraphicsItem *option,
-                              QWidget *                       widget)
+                              QWidget                        *widget)
 {
-    if (m_max_cycles == 0)
+    if (m_range == 0)
         return;
 
     QRectF rect = boundingRect();
@@ -130,14 +133,12 @@ void RulerGraphicsItem::paint(QPainter *                      painter,
     Settings::DisplayUnit unit = Settings::Get()->ReadRulerDisplayUnit();
 
     double max_unit = 0.0;
-    if (unit == Settings::DisplayUnit::kCycle)
-        max_unit = m_max_cycles;
-    else if (unit == Settings::DisplayUnit::kMs)
-        max_unit = ConvertCyclesToMs(m_max_cycles);
+    if (unit == Settings::DisplayUnit::kMs)
+        max_unit = m_range / 1000000.0;
     else if (unit == Settings::DisplayUnit::kUs)
-        max_unit = ConvertCyclesToUs(m_max_cycles);
+        max_unit = m_range / 1000.0;
     else if (unit == Settings::DisplayUnit::kNs)
-        max_unit = ConvertCyclesToNs(m_max_cycles);
+        max_unit = m_range;
 
     double unit_to_item_coord = m_width / max_unit;
 
@@ -226,11 +227,6 @@ void RulerGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
     QMenu menu;
 
-    QAction cycle_action("Display in cycles");
-    cycle_action.setCheckable(true);
-    cycle_action.setChecked(unit == Settings::DisplayUnit::kCycle);
-    menu.addAction(&cycle_action);
-
     QAction ms_action("Display in milliseconds (ms)");
     ms_action.setCheckable(true);
     ms_action.setChecked(unit == Settings::DisplayUnit::kMs);
@@ -247,9 +243,7 @@ void RulerGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     menu.addAction(&ns_action);
 
     QAction *selected_action_ptr = menu.exec(event->screenPos());
-    if (selected_action_ptr == &cycle_action)
-        Settings::Get()->WriteRulerDisplayUnit(Settings::DisplayUnit::kCycle);
-    else if (selected_action_ptr == &ms_action)
+    if (selected_action_ptr == &ms_action)
         Settings::Get()->WriteRulerDisplayUnit(Settings::DisplayUnit::kMs);
     else if (selected_action_ptr == &us_action)
         Settings::Get()->WriteRulerDisplayUnit(Settings::DisplayUnit::kUs);
@@ -257,7 +251,7 @@ void RulerGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         Settings::Get()->WriteRulerDisplayUnit(Settings::DisplayUnit::kNs);
 
     // Recalculate space between ticks
-    m_text_step = DetermineTextStepSize(m_max_cycles, m_width, m_visible_width);
+    m_text_step = DetermineTextStepSize(m_range, m_width, m_visible_width);
 
     update();
 }
@@ -274,11 +268,7 @@ QString RulerGraphicsItem::GetTickString(double value) const
     out.setRealNumberPrecision(0);
     out.setLocale(QLocale::system());  // To format #s (eg. English locale: 1000 -> 1,000)
 
-    if (unit == Settings::DisplayUnit::kCycle)
-    {
-        out << value << " cycle";
-    }
-    else if (unit == Settings::DisplayUnit::kMs)
+    if (unit == Settings::DisplayUnit::kMs)
     {
         out.setRealNumberPrecision(4);  // #.####
         out << value << " ms";
@@ -311,13 +301,8 @@ double RulerGraphicsItem::DetermineTextStepSize(uint64_t max_cycles,
     Settings::DisplayUnit unit = Settings::Get()->ReadRulerDisplayUnit();
 
     double max_units = max_cycles;
-    ;
-    if (unit == Settings::DisplayUnit::kCycle)
-    {
-        text_step_size = 1.0;
-        max_units = max_cycles;
-    }
-    else if (unit == Settings::DisplayUnit::kMs)
+
+    if (unit == Settings::DisplayUnit::kMs)
     {
         text_step_size = 0.01;
         max_units = ConvertCyclesToMs(max_cycles);

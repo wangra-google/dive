@@ -31,7 +31,7 @@ public:
     RulerGraphicsItem();
 
     // Set range
-    void SetMaxCycles(uint64_t max_cycles);
+    void SetRange(uint64_t range);
 
     // Get the width of the ruler
     uint64_t GetWidth() const;
@@ -42,19 +42,19 @@ public:
     void SetVisibleRange(int64_t scene_x, int64_t width);
 
     // Conversion functions
-    int64_t MapToCycle(int64_t scene_x);
+    int64_t MapToTimeRange(int64_t scene_x);
     int64_t MapToScene(int64_t cycle);
 
     // Given a potential new ruler width, calculate how many cycles would be visible
     // This is used to determine whether to zoom or not
-    uint64_t GetCyclesVisible(uint64_t visible_width, uint64_t ruler_width) const;
+    uint64_t GetTimeRangeVisible(uint64_t visible_width, uint64_t ruler_width) const;
 
     // QGraphicsItem overrides
     virtual QRectF       boundingRect() const Q_DECL_OVERRIDE;
     virtual QPainterPath shape() const Q_DECL_OVERRIDE;
-    virtual void         paint(QPainter *                      painter,
+    virtual void         paint(QPainter                       *painter,
                                const QStyleOptionGraphicsItem *option,
-                               QWidget *                       widget) Q_DECL_OVERRIDE;
+                               QWidget                        *widget) Q_DECL_OVERRIDE;
 
 protected:
     virtual void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) Q_DECL_OVERRIDE;
@@ -65,13 +65,12 @@ private:
                                   uint64_t max_width,
                                   uint64_t visible_width) const;
 
-    uint64_t m_width;
+    uint64_t m_width = 0;
     int64_t  m_visible_start = 0;
     int64_t  m_visible_width = 0;
 
-    // Cycle values
-    uint64_t m_max_cycles;
+    uint64_t m_range = 0;
 
     // Each major tick step, in whatever unit is enabled
-    double m_text_step;
+    double m_text_step = 0.0;
 };

@@ -963,7 +963,7 @@ CaptureData::LoadResult CaptureData::LoadPerfettoFile(const char *file_name)
 {
     std::string name(file_name);
     TraceReader reader(name);
-    if (reader.PopulatePerfettoTraceData(m_submission_data, m_surface_data))
+    if (reader.PopulatePerfettoTraceData(m_perfetto_data))
     {
         return LoadResult::kSuccess;
     }
@@ -1187,15 +1187,9 @@ const std::vector<SubmitInfo> &CaptureData::GetSubmits() const
 }
 
 //--------------------------------------------------------------------------------------------------
-const std::vector<SubmissionData> &CaptureData::GetPerfettoSubmissionData() const
+const PerfettoData &CaptureData::GetPerfettoData() const
 {
-    return m_submission_data;
-}
-
-//--------------------------------------------------------------------------------------------------
-const std::vector<SurfaceData> &CaptureData::GetPerfettoSurfaceData() const
-{
-    return m_surface_data;
+    return m_perfetto_data;
 }
 
 //--------------------------------------------------------------------------------------------------

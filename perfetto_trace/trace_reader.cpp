@@ -41,9 +41,9 @@ bool TraceReader::LoadTraceFileFromBuffer(const std::vector<uint8_t>& data)
     return m_trace_processor->Parse(std::move(blob_view)).ok();
 }
 
-bool TraceReader::PopulatePerfettoTraceData(std::vector<SubmissionData>& submission_data,
-                                            std::vector<SurfaceData>&    surface_data)
+bool TraceReader::PopulatePerfettoTraceData(PerfettoData& perfetto_data)
 {
+    perfetto_data.Reset();
     std::function<void(uint64_t parsed_size)> pf = [](uint64_t parsed_size) {
         std::cout << "Read " << parsed_size << std::endl;
     };
@@ -55,10 +55,18 @@ bool TraceReader::PopulatePerfettoTraceData(std::vector<SubmissionData>& submiss
     }
 
     GpuSliceDataParser sp(std::move(m_trace_processor));
-    submission_data = sp.ParseSubmissionData();
+    perfetto_data.m_submission_data = sp.ParseSubmissionData();
+
+    if (!perfetto_data.m_submission_data.empty())
+    {
+        const Dive::GpuSliceData& first = perfetto_data.m_submission_data.front().m_data.front();
+        const Dive::GpuSliceData& last = perfetto_data.m_submission_data.back().m_data.back();
+        perfetto_data.m_start_ts = first.m_ts;
+        perfetto_data.m_end_ts = last.m_ts + last.m_duration;
+    }
 
 #ifndef NDEBUG
-    for (const auto& d : submission_data)
+    for (const auto& d : perfetto_data.m_submission_data)
     {
         std::cout << "m_submission_id" << d.m_submission_id << std::endl;
         for (const auto& slice : d.m_data)
@@ -69,9 +77,9 @@ bool TraceReader::PopulatePerfettoTraceData(std::vector<SubmissionData>& submiss
     }
 #endif
 
-    surface_data = sp.ParseSurfaceData();
+    perfetto_data.m_surface_data = sp.ParseSurfaceData();
 #ifndef NDEBUG
-    for (const auto& data : surface_data)
+    for (const auto& data : perfetto_data.m_surface_data)
     {
         std::cout << "id " << data.m_surface_id << std::endl;
         std::cout << "ts " << data.m_ts << std::endl;

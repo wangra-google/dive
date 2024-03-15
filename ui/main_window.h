@@ -35,8 +35,7 @@ class TextFileView;
 class EventStateView;
 class BufferView;
 class OverviewTabView;
-class PerfCounterView;
-class SqttView;
+class GraphView;
 #ifndef NDEBUG
 class EventTimingView;
 #endif
@@ -161,6 +160,7 @@ private:
     int              m_shader_view_index;
     EventStateView  *m_event_state_view;
     int              m_event_state_view_tab_index;
+    GraphView       *m_graph_view;
 #if defined(ENABLE_CAPTURE_BUFFERS)
     BufferView *m_buffer_view;
 #endif

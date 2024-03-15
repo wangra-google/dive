@@ -202,11 +202,6 @@ void MostExpensiveEventsView::OnCustomContextMenuRequested(QPoint pos)
 
         QMenu menu;
 
-        QAction cycle_action("Display in cycles");
-        cycle_action.setCheckable(true);
-        cycle_action.setChecked(unit == Settings::DisplayUnit::kCycle);
-        menu.addAction(&cycle_action);
-
         QAction ms_action("Display in milliseconds (ms)");
         ms_action.setCheckable(true);
         ms_action.setChecked(unit == Settings::DisplayUnit::kMs);
@@ -223,9 +218,7 @@ void MostExpensiveEventsView::OnCustomContextMenuRequested(QPoint pos)
         menu.addAction(&ns_action);
 
         QAction *selected_action_ptr = menu.exec(m_event_list->mapToGlobal(pos));
-        if (selected_action_ptr == &cycle_action)
-            Settings::Get()->WriteEventListDisplayUnit(Settings::DisplayUnit::kCycle);
-        else if (selected_action_ptr == &ms_action)
+        if (selected_action_ptr == &ms_action)
             Settings::Get()->WriteEventListDisplayUnit(Settings::DisplayUnit::kMs);
         else if (selected_action_ptr == &us_action)
             Settings::Get()->WriteEventListDisplayUnit(Settings::DisplayUnit::kUs);
@@ -254,11 +247,7 @@ QString MostExpensiveEventsView::GetDurationString(uint64_t cycle) const
     out.setRealNumberPrecision(0);
     out.setLocale(QLocale::system());  // To format #s (eg. English locale: 1000 -> 1,000)
 
-    if (unit == Settings::DisplayUnit::kCycle)
-    {
-        out << cycle << " cycle";
-    }
-    else if (unit == Settings::DisplayUnit::kMs)
+    if (unit == Settings::DisplayUnit::kMs)
     {
         out.setRealNumberPrecision(4);  // #.####
         out << ConvertCyclesToMs(cycle) << " ms";

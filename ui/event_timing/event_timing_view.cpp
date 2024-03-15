@@ -16,7 +16,7 @@
 #include "event_graphics_item.h"
 #include "event_timing_graphics_scene.h"
 #include "event_timing_graphics_view.h"
-#include "ui/sqtt/ruler_graphics_item.h"
+#include "ui/graph/ruler_graphics_item.h"
 
 #include <QComboBox>
 #include <QGraphicsScene>
@@ -160,7 +160,7 @@ void EventTimingView::Reset()
     m_event_graphics_item_ptr->SetHeight(m_ruler_item_ptr->boundingRect().height());
 
     // TODO(wangra): cleanup fixme!
-    // m_ruler_item_ptr->SetMaxCycles(m_sqtt_data.GetMaxCycles());
+    // m_ruler_item_ptr->SetRange(m_sqtt_data.GetMaxCycles());
 
     // Update viewport before calling Update() to make sure the mapToScene() returns appropriate
     // values
@@ -203,7 +203,7 @@ void EventTimingView::OnMouseWheel(QPoint mouse_pos, int angle_delta)
     // Determine what cycle is pointed to by mouse
     double prev_scene_mouse_pt_x = m_event_timing_view_ptr->mapToScene(QPoint(mouse_pos.x(), 0))
                                    .x();
-    int64_t prev_cycle_mouse_pt = m_ruler_item_ptr->MapToCycle(prev_scene_mouse_pt_x);
+    int64_t prev_cycle_mouse_pt = m_ruler_item_ptr->MapToTimeRange(prev_scene_mouse_pt_x);
 
     // Determine how off-center, in scene-coordinates, mouse position is
     uint64_t visible_width = m_event_timing_view_ptr->contentsRect().width();
@@ -219,12 +219,12 @@ void EventTimingView::OnMouseWheel(QPoint mouse_pos, int angle_delta)
     {
         // TODO(wangra): cleanup fixme!
         // double  scene_right = m_event_timing_view_ptr->mapToScene(QPoint(visible_width, 0)).x();
-        // int64_t cycle_right = m_ruler_item_ptr->MapToCycle(scene_right);
+        // int64_t cycle_right = m_ruler_item_ptr->MapToTimeRange(scene_right);
         // DIVE_ASSERT(m_sqtt_data.GetMaxCycles() <= INT64_MAX);  // To account for using int64
         // if (cycle_right >= (int64_t)m_sqtt_data.GetMaxCycles())
         {
             double  scene_left = m_event_timing_view_ptr->mapToScene(QPoint(0, 0)).x();
-            int64_t cycle_left = m_ruler_item_ptr->MapToCycle(scene_left);
+            int64_t cycle_left = m_ruler_item_ptr->MapToTimeRange(scene_left);
             if (cycle_left <= 0)
                 return;
         }
@@ -244,7 +244,7 @@ void EventTimingView::OnMouseWheel(QPoint mouse_pos, int angle_delta)
     const uint64_t kMinCyclesVisible = 50;
     if (angle_delta > 0)
     {
-        if (m_ruler_item_ptr->GetCyclesVisible(visible_width, new_width) < kMinCyclesVisible)
+        if (m_ruler_item_ptr->GetTimeRangeVisible(visible_width, new_width) < kMinCyclesVisible)
             return;
     }
 

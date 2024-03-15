@@ -89,8 +89,7 @@ Settings::DisplayUnit Settings::ReadRulerDisplayUnit()
 {
     QSettings   settings;
     DisplayUnit display_unit = (DisplayUnit)settings.value("rulerDisplayUnit", 0).toInt();
-    DIVE_ASSERT(display_unit == kCycle || display_unit == kMs || display_unit == kUs ||
-                display_unit == kNs);
+    DIVE_ASSERT(display_unit == kMs || display_unit == kUs || display_unit == kNs);
     return display_unit;
 }
 //--------------------------------------------------------------------------------------------------
@@ -105,8 +104,7 @@ Settings::DisplayUnit Settings::ReadEventListDisplayUnit()
 {
     QSettings   settings;
     DisplayUnit display_unit = (DisplayUnit)settings.value("eventListDisplayUnit", 0).toInt();
-    DIVE_ASSERT(display_unit == kCycle || display_unit == kMs || display_unit == kUs ||
-                display_unit == kNs);
+    DIVE_ASSERT(display_unit == kMs || display_unit == kUs || display_unit == kNs);
     return display_unit;
 }
 //--------------------------------------------------------------------------------------------------

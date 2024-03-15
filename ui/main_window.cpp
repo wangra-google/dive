@@ -48,6 +48,7 @@
 #endif
 #include "command_tab_view.h"
 #include "event_state_view.h"
+#include "graph/graph_view.h"
 #include "hover_help_model.h"
 #include "overview_tab_view.h"
 #include "property_panel.h"
@@ -196,6 +197,8 @@ MainWindow::MainWindow()
         m_tab_widget->addTab(m_command_tab_view, "Commands");
         m_shader_view_index = m_tab_widget->addTab(m_shader_view, "Shaders");
         m_event_state_view_tab_index = m_tab_widget->addTab(m_event_state_view, "Event State");
+        m_graph_view = new GraphView(m_data_core->GetCaptureData().GetPerfettoData());
+        m_tab_widget->addTab(m_graph_view, "Profile");
 #if defined(ENABLE_CAPTURE_BUFFERS)
         m_buffer_view = new BufferView(*m_data_core);
         m_tab_widget->addTab(m_buffer_view, "Buffers");
@@ -566,6 +569,11 @@ bool MainWindow::LoadFile(const char *file_name, bool is_temp_file)
     m_command_hierarchy_model->EndResetModel();
 
     ExpandResizeHierarchyView();
+
+    if (!m_data_core->GetCaptureData().GetPerfettoData().IsEmpty())
+    {
+        m_graph_view->OnLoadFile();
+    }
 
     m_hover_help->SetCurItem(HoverHelp::Item::kNone);
 

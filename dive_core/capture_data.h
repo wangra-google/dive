@@ -367,8 +367,7 @@ public:
     }
     const std::vector<SubmitInfo> &GetSubmits() const;
 #if defined(DIVE_ENABLE_PERFETTO)
-    const std::vector<SubmissionData> &GetPerfettoSubmissionData() const;
-    const std::vector<SurfaceData>    &GetPerfettoSurfaceData() const;
+    const PerfettoData &GetPerfettoData() const;
 #endif
 
     CaptureData &operator=(CaptureData &&) = default;
@@ -416,8 +415,6 @@ private:
     std::vector<PresentInfo>       m_presents;  // More than 1 if multi-frame capture
     std::vector<RingInfo>          m_rings;
     std::vector<TextInfo>          m_text;
-    std::vector<SubmissionData>    m_submission_data;
-    std::vector<SurfaceData>       m_surface_data;
     WaveInfo                       m_waves;
     RegisterInfo                   m_registers;
     VulkanMetadataBlockHeader      m_vulkan_metadata_header;
@@ -426,6 +423,7 @@ private:
     ILog                          *m_log_ptr;
     std::string                    m_cur_capture_file;
     CaptureDataHeader              m_data_header;
+    PerfettoData                   m_perfetto_data;
 };
 
 }  // namespace Dive

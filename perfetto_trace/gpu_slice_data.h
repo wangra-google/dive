@@ -148,4 +148,25 @@ private:
     }
 };
 
+struct PerfettoData
+{
+    std::vector<SubmissionData> m_submission_data;
+    std::vector<SurfaceData>    m_surface_data;
+
+    uint64_t m_start_ts = 0;  // The timestamp at the start of the first slice (in nanoseconds).
+    uint64_t m_end_ts = 0;    // The timestamp at the end of the last slice (in nanoseconds).
+
+    void Reset()
+    {
+        m_submission_data.clear();
+        m_surface_data.clear();
+        m_start_ts = 0;
+        m_end_ts = 0;
+    }
+
+    bool     IsEmpty() const { return m_submission_data.empty() && m_surface_data.empty(); }
+    uint64_t GetRelativeTime(uint64_t time) const { return (time - m_start_ts); }
+    uint64_t GetTotalTimeDuration() const { return GetRelativeTime(m_end_ts); }
+};
+
 }  // namespace Dive

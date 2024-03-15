@@ -1140,7 +1140,7 @@ void CommandHierarchyCreator::OnSubmitEnd(uint32_t submit_index, const SubmitInf
     // Insert present node to event topology, when appropriate
     if (m_capture_data_ptr != nullptr)
     {
-        for (const auto &submission : m_capture_data_ptr->GetPerfettoSubmissionData())
+        for (const auto &submission : m_capture_data_ptr->GetPerfettoData().m_submission_data)
         {
             DIVE_ASSERT(submission.m_data.size() == m_perfetto_slice_count);
         }
