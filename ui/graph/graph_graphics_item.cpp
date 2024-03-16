@@ -44,6 +44,10 @@ void GraphGraphicsItem::ResetSelectionRegion()
     m_selection_region_start_cycle = 0;
     m_selection_region_end_cycle = 0;
     m_selection_region_prev_cycle = 0;
+
+    m_nav_first_selected_event = 0;
+    m_nav_last_selected_event = 0;
+
     SetSelectionInfo(SelectionType::kNone);
     m_ignore_mouse_move = true;
 }
@@ -199,7 +203,7 @@ void GraphGraphicsItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
         return;
     }
 
-    double item_coord_to_time_range = m_perfetto_data.GetTotalTimeDuration() / m_width;
+    double item_coord_to_time_range = (double)m_perfetto_data.GetTotalTimeDuration() / m_width;
     m_selection_region_prev_cycle = event->pos().x() * item_coord_to_time_range;
     m_selection_region_start_cycle = m_selection_region_end_cycle = m_selection_region_prev_cycle;
     m_selection_start_pos = event->pos();
@@ -408,8 +412,8 @@ void GraphGraphicsItem::DrawNavigator(QPainter *painter)
     //        ++id;
     //}
 
-    //// Draw selected/highlighted events/barriers
-    // DrawNavigatorHighlighted(painter);
+    // Draw selected/highlighted events/barriers
+    DrawNavigatorHighlighted(painter);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -494,7 +498,110 @@ void GraphGraphicsItem::DrawSelectionRegion(QPainter *painter)
 }
 
 //--------------------------------------------------------------------------------------------------
-void GraphGraphicsItem::DrawNavigatorHighlighted(QPainter *painter) {}
+void GraphGraphicsItem::DrawNavigatorHighlighted(QPainter *painter)
+{
+    const auto &events = m_sqtt_data_ptr->GetEvents();
+
+    std::set<Dive::SqttEventId> selected_events;
+    uint64_t                    selected_start_cycle = UINT64_MAX;
+    uint64_t                    selected_end_cycle = 0;
+    Dive::SqttStreamId          selected_stream = Dive::SqttStreamId::kNone;
+    if (m_nav_first_selected_event != Dive::SqttEventId() &&
+        m_nav_last_selected_event != Dive::SqttEventId())
+    {
+        auto stream_id = events.GetStream(m_nav_first_selected_event);
+        DIVE_ASSERT(selected_stream == Dive::SqttStreamId::kNone || selected_stream == stream_id);
+        selected_stream = stream_id;
+        for (auto event_id = m_nav_first_selected_event; event_id <= m_nav_last_selected_event;
+             ++event_id)
+        {
+            if (events.GetStream(event_id) == stream_id)
+            {
+                selected_events.insert(event_id);
+                selected_start_cycle = std::min<uint64_t>(GetEventStartCycle(event_id),
+                                                          selected_start_cycle);
+                selected_end_cycle = std::max<uint64_t>(GetEventEndCycle(event_id),
+                                                        selected_end_cycle);
+            }
+        }
+    }
+    std::set<Dive::SqttEventId> hovered_events;
+    uint64_t                    hovered_start_cycle = UINT64_MAX;
+    uint64_t                    hovered_end_cycle = 0;
+    Dive::SqttStreamId          hovered_stream = Dive::SqttStreamId::kNone;
+    bool                        hovered_show_shader_stages = false;
+    if (m_nav_hovered_event != Dive::SqttEventId())
+    {
+        hovered_show_shader_stages = true;
+        hovered_events.insert(m_nav_hovered_event);
+        selected_events.erase(m_nav_hovered_event);
+        hovered_start_cycle = std::min<uint64_t>(GetEventStartCycle(m_nav_hovered_event),
+                                                 hovered_start_cycle);
+        hovered_end_cycle = std::max<uint64_t>(GetEventEndCycle(m_nav_hovered_event),
+                                               hovered_end_cycle);
+        auto stream_id = events.GetStream(m_nav_hovered_event);
+        DIVE_ASSERT(hovered_stream == Dive::SqttStreamId::kNone || hovered_stream == stream_id);
+        hovered_stream = stream_id;
+    }
+
+    std::vector<Dive::LabelMarkerId> highlighted_labels;
+    if (m_nav_hovered_label != Dive::LabelMarkerId())
+    {
+        highlighted_labels.push_back(m_nav_hovered_label);
+        auto label_it = labels.find(m_nav_hovered_label);
+        auto event_marker_begin = event_markers.find(label_it->FirstEvent());
+        auto event_marker_end = event_marker_begin + label_it->EventCount();
+        for (auto event_marker_it = event_marker_begin; event_marker_it != event_marker_end;
+             ++event_marker_it)
+        {
+            auto event_id = event_marker_it->SqttEvent();
+            hovered_events.insert(event_id);
+            selected_events.erase(event_id);
+        }
+
+        auto barrier_begin = barriers.find(label_it->FirstBarrier());
+        auto barrier_end = barrier_begin + label_it->BarrierCount();
+        for (auto barrier_it = barrier_begin; barrier_it != barrier_end; ++barrier_it)
+        {
+            auto barrier_id = barrier_it->id();
+            highlighted_barriers.push_back(barrier_id);
+        }
+
+        hovered_start_cycle = std::min<uint64_t>(GetLabelStartCycle(m_nav_hovered_label),
+                                                 hovered_start_cycle);
+        hovered_end_cycle = std::max<uint64_t>(GetLabelEndCycle(m_nav_hovered_label),
+                                               hovered_end_cycle);
+    }
+    if (m_nav_selected_label != Dive::LabelMarkerId())
+    {
+        highlighted_labels.push_back(m_nav_selected_label);
+    }
+
+    DrawNavigatorHighlightedEvents(painter, hovered_events, hovered_show_shader_stages);
+    DrawNavigatorHighlightedEvents(painter, selected_events, false);
+
+    // Draw vertical lines to show begin and end of selected/hovered events/barriers
+    QPen grid_line_pen(Qt::darkGray);
+    painter->setPen(grid_line_pen);
+    if (selected_stream != Dive::SqttStreamId::kNone)
+    {
+        uint64_t start_x, end_x;
+        CalcRectCoord(selected_start_cycle, selected_end_cycle, &start_x, &end_x);
+        uint32_t row = GetStreamNavigatorRow(selected_stream);
+        uint32_t bottom = GetNavigatorStartY(row) + GetNavigatorHeight();
+        painter->drawLine(start_x, 0, start_x, bottom);
+        painter->drawLine(end_x, 0, end_x, bottom);
+    }
+    if (hovered_stream != Dive::SqttStreamId::kNone)
+    {
+        uint64_t start_x, end_x;
+        CalcRectCoord(hovered_start_cycle, hovered_end_cycle, &start_x, &end_x);
+        uint32_t row = GetStreamNavigatorRow(hovered_stream);
+        uint32_t bottom = GetNavigatorStartY(row) + GetNavigatorHeight();
+        painter->drawLine(start_x, 0, start_x, bottom);
+        painter->drawLine(end_x, 0, end_x, bottom);
+    }
+}
 
 //--------------------------------------------------------------------------------------------------
 void GraphGraphicsItem::DrawNavigatorHighlightedEvents(QPainter *painter, bool draw_shader_stages)
@@ -502,13 +609,83 @@ void GraphGraphicsItem::DrawNavigatorHighlightedEvents(QPainter *painter, bool d
 }
 
 //--------------------------------------------------------------------------------------------------
+GraphGraphicsItem::NavigatorHit GraphGraphicsItem::FindNavigatorHit(double item_x,
+                                                                    double item_y) const
+{
+    NavigatorHit hit = { kInvalidSlice, kInvalidSlice, kInvalidSlice };
+    if (m_perfetto_data.IsEmpty())
+        return hit;
+
+    // Conversion factors
+    double   item_coord_to_time_range = (double)m_perfetto_data.GetTotalTimeDuration() / m_width;
+    uint64_t hover_time = (uint64_t)(item_x * item_coord_to_time_range);
+
+    uint32_t slice_id = 0;
+    uint64_t prev_slice_end = 0;
+
+    for (const auto &submission : m_perfetto_data.m_submission_data)
+    {
+        for (const auto &slice : submission.m_data)
+        {
+            uint64_t slice_start = slice.m_ts;
+            uint64_t slice_end = slice_start + slice.m_duration;
+
+            // Events appear in order of start-cycle. Early out.
+            if (slice_start > hover_time)
+            {
+                hit.m_next_slice = slice_id;
+                break;
+            }
+            else if (slice_end < hover_time)
+            {
+                if (prev_slice_end < slice_end)
+                {
+                    hit.m_prev_slice = slice_id;
+                    prev_slice_end = slice_end;
+                }
+            }
+            else
+            {
+                hit.m_slice = slice_id;
+            }
+
+            ++slice_id;
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
 void GraphGraphicsItem::HandleNavigatorHover(double item_x, double item_y) {}
 
 //--------------------------------------------------------------------------------------------------
-void GraphGraphicsItem::HandleSelection(double item_x, double item_y) {}
+void GraphGraphicsItem::HandleSelection(double item_x, double item_y)
+{
+    double navigator_row_start_y = GetNavigatorStartY(0);
+    double navigator_row_end_y = GetNavigatorStartY(GetNumNavigatorRows() - 1) +
+                                 GetNavigatorHeight();
+
+    if (item_y >= navigator_row_start_y && item_y < navigator_row_end_y && !m_enable_serial_chart)
+    {
+        HandleEventSelection(item_x, item_y);
+    }
+}
 
 //--------------------------------------------------------------------------------------------------
-void GraphGraphicsItem::HandleEventSelection(double item_x, double item_y) {}
+void GraphGraphicsItem::HandleEventSelection(double item_x, double item_y)
+{
+    auto hit = FindNavigatorHit(item_x, item_y);
+
+    if (hit.m_slice != kInvalidSlice)
+    {
+        m_nav_first_selected_event = m_nav_last_selected_event = hit.m_slice;
+
+        // Set event selection info
+        SetSelectionInfo(SelectionType::kEvent);
+
+        // Trigger event selection on command heirarchy view
+        emit SelectedEventChanged(hit.m_slice);
+    }
+}
 
 //--------------------------------------------------------------------------------------------------
 void GraphGraphicsItem::CalcRectCoord(uint64_t  start_cycle,

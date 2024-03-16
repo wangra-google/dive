@@ -164,7 +164,7 @@ struct PerfettoData
         m_end_ts = 0;
     }
 
-    bool     IsEmpty() const { return m_submission_data.empty() && m_surface_data.empty(); }
+    bool     IsEmpty() const { return m_submission_data.empty() || m_surface_data.empty(); }
     uint64_t GetRelativeTime(uint64_t time) const { return (time - m_start_ts); }
     uint64_t GetTotalTimeDuration() const { return GetRelativeTime(m_end_ts); }
 };

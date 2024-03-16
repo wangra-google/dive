@@ -185,19 +185,30 @@ private:
         return stm.str();
     };
 
+    const uint32_t kInvalidSlice = UINT32_MAX;
+    struct NavigatorHit
+    {
+        uint32_t m_slice;
+        uint32_t m_prev_slice;  // last slice ending before hover cycle (on any stream)
+        uint32_t m_next_slice;  // first slice starting after hover cycle (on any stream)
+    };
+    NavigatorHit FindNavigatorHit(double x, double y) const;
+
     const uint32_t kNavStartPadding = 8;
     const uint32_t kSelectedRectExtraPadding = 5;
     const uint32_t kNavBarrierRectHeight = 12;
 
-    int64_t           m_visible_start;
-    int64_t           m_visible_width;
-    uint64_t          m_width;
-    uint32_t          m_se = 0;
-    uint32_t          m_cu = 0;
-    uint32_t          m_simd = 0;
-    bool              m_enable_serial_chart = false;
-    bool              m_show_barriers = false;
-    bool              m_show_labels = false;
+    int64_t  m_visible_start;
+    int64_t  m_visible_width;
+    uint64_t m_width;
+
+    uint32_t m_nav_first_selected_event = 0;
+    uint32_t m_nav_last_selected_event = 0;
+
+    bool m_enable_serial_chart = false;
+    bool m_show_barriers = false;
+    bool m_show_labels = false;
+
     std::vector<bool> m_select_nav_stream;
     bool              m_hover_msg_sent = false;
     HoverHelp        *m_hover_help;
@@ -231,6 +242,7 @@ private:
 
 signals:
     void SendSelectionInfo(const QString &);
+    void SelectedEventChanged(uint32_t sqtt_event);
 };
 
 //--------------------------------------------------------------------------------------------------
