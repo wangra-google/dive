@@ -127,6 +127,7 @@ if(${GFXRECON_ENABLE_RELEASE_ASSERTS})
 endif()
 
 option(GFXRECON_TOCPP_SUPPORT "Build ToCpp export tool as part of GFXReconstruct builds." TRUE)
+option(GFXRECON_DIVE_SUPPORT "Build component for Dive as part of GFXReconstruct builds." TRUE)
 
 if(MSVC)
 

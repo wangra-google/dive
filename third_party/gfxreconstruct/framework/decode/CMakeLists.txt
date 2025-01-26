@@ -258,6 +258,8 @@ target_sources(gfxrecon_decode
                     $<$<BOOL:${D3D12_SUPPORT}>:${CMAKE_CURRENT_SOURCE_DIR}/../generated/generated_dx12_enum_to_json.h>
                     $<$<BOOL:${D3D12_SUPPORT}>:${CMAKE_CURRENT_SOURCE_DIR}/../generated/generated_dx12_struct_decoders_to_json.h>
                     $<$<BOOL:${D3D12_SUPPORT}>:${CMAKE_CURRENT_SOURCE_DIR}/../generated/generated_dx12_struct_decoders_to_json.cpp>
+                    $<$<BOOL:${GFXRECON_DIVE_SUPPORT}>:${CMAKE_CURRENT_LIST_DIR}/dive/vulkan_dive_replay_consumer.h>
+                    $<$<BOOL:${GFXRECON_DIVE_SUPPORT}>:${CMAKE_CURRENT_LIST_DIR}/dive/vulkan_dive_replay_consumer.cpp>
 )
 
 if (${GFXRECON_AGS_SUPPORT_FINAL})

@@ -29,6 +29,7 @@
 #include "decode/preload_file_processor.h"
 #include "decode/vulkan_replay_options.h"
 #include "decode/vulkan_tracked_object_info_table.h"
+#include "decode/dive/vulkan_dive_replay_consumer.h"
 #include "format/format.h"
 #include "generated/generated_vulkan_decoder.h"
 #include "generated/generated_vulkan_replay_consumer.h"
@@ -147,7 +148,7 @@ void android_main(struct android_app* app)
                     return;
                 }
 
-                gfxrecon::decode::VulkanReplayConsumer vulkan_replay_consumer(application, replay_options);
+                gfxrecon::decode::VulkanDiveReplayConsumer vulkan_replay_consumer(application, replay_options);
                 gfxrecon::decode::VulkanDecoder        vulkan_decoder;
                 uint32_t                               start_frame, end_frame;
                 bool        has_mfr = GetMeasurementFrameRange(arg_parser, start_frame, end_frame);

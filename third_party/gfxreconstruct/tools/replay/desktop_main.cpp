@@ -31,6 +31,7 @@
 #include "decode/vulkan_tracked_object_info_table.h"
 #include "generated/generated_vulkan_decoder.h"
 #include "generated/generated_vulkan_replay_consumer.h"
+#include "decode/dive/vulkan_dive_replay_consumer.h"
 #include "graphics/fps_info.h"
 #include "util/argument_parser.h"
 #include "util/logging.h"
@@ -216,7 +217,7 @@ int main(int argc, const char** argv)
                                                  preload_measurement_frame_range,
                                                  measurement_file_name);
 
-            gfxrecon::decode::VulkanReplayConsumer vulkan_replay_consumer(application, vulkan_replay_options);
+            gfxrecon::decode::VulkanDiveReplayConsumer vulkan_replay_consumer(application, vulkan_replay_options);
             gfxrecon::decode::VulkanDecoder        vulkan_decoder;
 
             if (vulkan_replay_options.enable_vulkan)
