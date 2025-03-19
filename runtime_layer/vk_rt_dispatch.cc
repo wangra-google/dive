@@ -44,6 +44,12 @@ void InitDeviceDispatchTable(VkDevice device, PFN_vkGetDeviceProcAddr pa, Device
     dt->CmdDrawIndexed = (PFN_vkCmdDrawIndexed)pa(device, "vkCmdDrawIndexed");
     dt->BeginCommandBuffer = (PFN_vkBeginCommandBuffer)pa(device, "vkBeginCommandBuffer");
     dt->EndCommandBuffer = (PFN_vkEndCommandBuffer)pa(device, "vkEndCommandBuffer");
+    dt->AcquireNextImageKHR = (PFN_vkAcquireNextImageKHR)pa(device, "vkAcquireNextImageKHR");
+    dt->GetDeviceQueue2 = (PFN_vkGetDeviceQueue2)pa(device, "vkGetDeviceQueue2");
+    dt->GetDeviceQueue = (PFN_vkGetDeviceQueue)pa(device, "vkGetDeviceQueue");
+    dt->DestroyDevice = (PFN_vkDestroyDevice)pa(device, "vkDestroyDevice");
+    dt->CmdInsertDebugUtilsLabel = (PFN_vkCmdInsertDebugUtilsLabelEXT)
+    pa(device, "vkCmdInsertDebugUtilsLabelEXT");
 }
 
 }  // namespace DiveLayer
