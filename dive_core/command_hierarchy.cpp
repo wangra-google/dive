@@ -1026,6 +1026,44 @@ bool CommandHierarchyCreator::OnPacket(const IMemoryManager &mem_manager,
             }
 
             m_render_marker_index = AddNode(NodeType::kRenderMarkerNode, std::move(desc), 0);
+
+            // Update the filter exclude list
+            // For kBinningPassOnly
+            // - Keep Binning Pass
+            // - Exclude all Tile&Resolve Passes (0 - N)
+            // For kFirstTilePassOnly
+            // - Keep Tile Pass 0 (1st Tile&Resolve Pass after the Binning Pass)
+            // - Exclude all nodes in Binning Pass
+            // - Exclude Tile Pass 1 to N
+            if (marker == RM6_BINNING)
+            {
+                m_tracking_first_tile_pass_start = true;
+                m_command_hierarchy_ptr
+                ->AddToFilterExcludeIndexList(m_render_marker_index,
+                                              CommandHierarchy::kFirstTilePassOnly);
+            }
+
+            if ((marker == RM6_GMEM) || (marker == RM6_RESOLVE))
+            {
+                m_command_hierarchy_ptr
+                ->AddToFilterExcludeIndexList(m_render_marker_index,
+                                              CommandHierarchy::kBinningPassOnly);
+
+                if (!m_tracking_first_tile_pass_start)
+                {
+                    m_command_hierarchy_ptr
+                    ->AddToFilterExcludeIndexList(m_render_marker_index,
+                                                  CommandHierarchy::kFirstTilePassOnly);
+                    m_command_hierarchy_ptr
+                    ->AddToFilterExcludeIndexList(m_render_marker_index,
+                                                  CommandHierarchy::kBinningAndFirstTilePass);
+                }
+                if (m_tracking_first_tile_pass_start && (marker == RM6_RESOLVE))
+                {
+                    m_tracking_first_tile_pass_start = false;
+                }
+            }
+
             AddChild(CommandHierarchy::kAllEventTopology,
                      m_cur_submit_node_index,
                      m_render_marker_index);
@@ -1094,6 +1132,7 @@ void CommandHierarchyCreator::OnSubmitStart(uint32_t submit_index, const SubmitI
     m_state_tracker.Reset();
     m_new_event_start = true;
     m_new_ib_start = true;
+    m_tracking_first_tile_pass_start = false;
 }
 
 //--------------------------------------------------------------------------------------------------

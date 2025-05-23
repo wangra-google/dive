@@ -32,6 +32,70 @@
 #include "dive_core/data_core.h"
 #include "hover_help_model.h"
 
+static constexpr uint64_t kInvalidNodeIndex = static_cast<uint64_t>(-1);
+
+// =================================================================================================
+// DiveFilterModel
+// =================================================================================================
+DiveFilterModel::DiveFilterModel(const Dive::CommandHierarchy &command_hierarchy, QObject *parent) :
+    QSortFilterProxyModel(parent),
+    m_command_hierarchy(command_hierarchy)
+{
+}
+
+void DiveFilterModel::applyNewFilterMode(FilterMode new_mode)
+{
+    // Check if the mode is actually changing to avoid unnecessary resets
+    if (m_filter_mode == new_mode)
+        return;
+
+    beginResetModel();
+    m_filter_mode = new_mode;
+    // invalidateFilter() doesn't invalidate all nodes
+    // begin/endResetModel() will cause a full re-evaluation and rebuild of the proxy's internal
+    // mapping.
+    endResetModel();  // Call the protected method from within the class
+}
+
+void DiveFilterModel::SetMode(FilterMode filter_mode)
+{
+    applyNewFilterMode(filter_mode);
+}
+
+bool DiveFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
+{
+    if (m_filter_mode == kNone)
+    {
+        return true;
+    }
+
+    QModelIndex index = sourceModel()->index(sourceRow, 0, sourceParent);
+    if (!index.isValid())
+        return true;
+
+    uint64_t node_index = (uint64_t)index.internalPointer();
+
+    Dive::CommandHierarchy::FilterListType
+    filter_list_type = Dive::CommandHierarchy::kFilterListTypeCount;
+    switch (m_filter_mode)
+    {
+    case kBinningPassOnly: filter_list_type = Dive::CommandHierarchy::kBinningPassOnly; break;
+    case kFirstTilePassOnly: filter_list_type = Dive::CommandHierarchy::kFirstTilePassOnly; break;
+    case kBinningAndFirstTilePass:
+        filter_list_type = Dive::CommandHierarchy::kBinningAndFirstTilePass;
+        break;
+    default: DIVE_ASSERT(false); break;
+    }
+    const auto &filter_exclude_indices = m_command_hierarchy.GetFilterExcludeIndices(
+    filter_list_type);
+    if (filter_exclude_indices.find(node_index) != filter_exclude_indices.end())
+    {
+        return false;  // Hide this row
+    }
+
+    return true;
+}
+
 // =================================================================================================
 // DiveTreeViewDelegate
 // =================================================================================================
@@ -47,12 +111,13 @@ void DiveTreeViewDelegate::paint(QPainter                   *painter,
                                  const QStyleOptionViewItem &option,
                                  const QModelIndex          &index) const
 {
+    uint64_t node_index = m_dive_tree_view_ptr->GetNodeIndex(index);
+
     // Hover help messages
     if (option.state & QStyle::State_MouseOver)
     {
         const Dive::CommandHierarchy &command_hierarchy = m_dive_tree_view_ptr
                                                           ->GetCommandHierarchy();
-        uint64_t node_index = (uint64_t)(index.internalPointer());
         m_hover_help_ptr->SetCommandHierarchyNodeItem(command_hierarchy, node_index);
     }
 
@@ -64,7 +129,6 @@ void DiveTreeViewDelegate::paint(QPainter                   *painter,
 
         QStyle *style = options.widget ? options.widget->style() : QApplication::style();
 
-        uint64_t node_index = (uint64_t)(index.internalPointer());
         options.text = QString(m_dive_tree_view_ptr->GetCommandHierarchy().GetNodeDesc(node_index));
 
         QTextDocument doc;
@@ -126,7 +190,7 @@ QSize DiveTreeViewDelegate::sizeHint(const QStyleOptionViewItem &option,
 DiveTreeView::DiveTreeView(const Dive::CommandHierarchy &command_hierarchy, QWidget *parent) :
     QTreeView(parent),
     m_command_hierarchy(command_hierarchy),
-    curr_node_selected(QModelIndex())
+    m_curr_node_selected(QModelIndex())
 {
     setHorizontalScrollBar(new QScrollBar);
     horizontalScrollBar()->setEnabled(true);
@@ -150,15 +214,36 @@ void DiveTreeView::setCurrentNode(uint64_t node_index)
     auto        m = dynamic_cast<CommandModel *>(model());
     QModelIndex ix = m->findNode(node_index);
     ix = m->index(ix.row(), 1, ix.parent());
-    curr_node_selected = ix;
+    m_curr_node_selected = ix;
     scrollTo(ix);
     setCurrentIndex(ix);
 }
 
 //--------------------------------------------------------------------------------------------------
+uint64_t DiveTreeView::GetNodeIndex(const QModelIndex &index) const
+{
+    const QAbstractItemModel *current_model = model();
+    const DiveFilterModel    *filter_model = qobject_cast<const DiveFilterModel *>(current_model);
+
+    if (!filter_model)
+    {
+        return kInvalidNodeIndex;
+    }
+
+    QModelIndex source_index = filter_model->mapToSource(index);
+
+    if (!source_index.isValid())
+    {
+        return kInvalidNodeIndex;
+    }
+
+    return (uint64_t)(source_index.internalPointer());
+}
+
+//--------------------------------------------------------------------------------------------------
 void DiveTreeView::expandNode(const QModelIndex &index)
 {
-    uint64_t node_index = (uint64_t)(index.internalPointer());
+    uint64_t node_index = GetNodeIndex(index);
     if (m_command_hierarchy.GetNodeType(node_index) == Dive::NodeType::kMarkerNode)
     {
         Dive::CommandHierarchy::MarkerType marker_type = m_command_hierarchy.GetMarkerNodeType(
@@ -173,7 +258,7 @@ void DiveTreeView::expandNode(const QModelIndex &index)
 //--------------------------------------------------------------------------------------------------
 void DiveTreeView::collapseNode(const QModelIndex &index)
 {
-    uint64_t node_index = (uint64_t)(index.internalPointer());
+    uint64_t node_index = GetNodeIndex(index);
     if (m_command_hierarchy.GetNodeType(node_index) == Dive::NodeType::kMarkerNode)
     {
         Dive::CommandHierarchy::MarkerType marker_type = m_command_hierarchy.GetMarkerNodeType(
@@ -210,7 +295,7 @@ void DiveTreeView::gotoEvent(bool is_above)
     {
         auto     event_id_idx = m->index(next_node_idx.row(), 1, next_node_idx.parent());
         auto     event_id = m->data(event_id_idx, Qt::DisplayRole);
-        uint64_t node_idx = (uint64_t)(next_node_idx.internalPointer());
+        uint64_t node_idx = GetNodeIndex(next_node_idx);
         auto     node_type = m_command_hierarchy.GetNodeType(node_idx);
 
         if (event_id != QVariant() && (node_type == Dive::NodeType::kDrawDispatchBlitNode ||
@@ -233,9 +318,10 @@ void DiveTreeView::gotoEvent(bool is_above)
 //--------------------------------------------------------------------------------------------------
 void DiveTreeView::currentChanged(const QModelIndex &current, const QModelIndex &previous)
 {
-    curr_node_selected = current;
-    emit currentNodeChanged((uint64_t)current.internalPointer(),
-                            (uint64_t)previous.internalPointer());
+    m_curr_node_selected = current;
+    const uint64_t current_node_index = GetNodeIndex(current);
+    const uint64_t previous_node_index = GetNodeIndex(previous);
+    emit           currentNodeChanged(current_node_index, previous_node_index);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -247,21 +333,21 @@ const Dive::CommandHierarchy &DiveTreeView::GetCommandHierarchy() const
 //--------------------------------------------------------------------------------------------------
 void DiveTreeView::RetainCurrentNode()
 {
-    if (!curr_node_selected.isValid())
+    if (!m_curr_node_selected.isValid())
         return;
     auto     m = dynamic_cast<CommandModel *>(model());
-    uint64_t node_index = (uint64_t)(curr_node_selected.internalPointer());
-    curr_node_selected = m->findNode(node_index);
-    curr_node_selected = m->index(curr_node_selected.row(), 1, curr_node_selected.parent());
-    if (isExpanded(curr_node_selected.parent()))
+    uint64_t node_index = GetNodeIndex(m_curr_node_selected);
+    m_curr_node_selected = m->findNode(node_index);
+    m_curr_node_selected = m->index(m_curr_node_selected.row(), 1, m_curr_node_selected.parent());
+    if (isExpanded(m_curr_node_selected.parent()))
     {
-        scrollTo(curr_node_selected, QAbstractItemView::PositionAtCenter);
-        setCurrentIndex(curr_node_selected);
+        scrollTo(m_curr_node_selected, QAbstractItemView::PositionAtCenter);
+        setCurrentIndex(m_curr_node_selected);
     }
     else
     {
         // Reset selection and scroll to the approximate area where the previous node was
-        QModelIndex index = m->parent(curr_node_selected);
+        QModelIndex index = m->parent(m_curr_node_selected);
         setCurrentIndex(QModelIndex());
         while (index.isValid() && !isExpanded(m->parent(index)))
             index = m->parent(index);
@@ -312,7 +398,7 @@ void DiveTreeView::keyPressEvent(QKeyEvent *event)
 void DiveTreeView::setAndScrollToNode(QModelIndex &idx)
 {
     auto     m = dynamic_cast<CommandModel *>(model());
-    uint64_t node_index = (uint64_t)(idx.internalPointer());
+    uint64_t node_index = GetNodeIndex(idx);
     idx = m->findNode(node_index);
     idx = m->index(idx.row(), 1, idx.parent());
     scrollTo(idx);
@@ -322,91 +408,89 @@ void DiveTreeView::setAndScrollToNode(QModelIndex &idx)
 //--------------------------------------------------------------------------------------------------
 void DiveTreeView::searchNodeByText(const QString &search_text)
 {
-    search_indexes.clear();
-    search_index_it = search_indexes.begin();
+    m_search_indexes.clear();
+    m_search_index_it = m_search_indexes.begin();
 
     if (search_text.isEmpty())
         return;
 
     auto m = dynamic_cast<CommandModel *>(model());
-    search_indexes = m->search(m->index(0, 0), QVariant::fromValue(search_text));
-    search_index_it = search_indexes.begin();
+    m_search_indexes = m->search(m->index(0, 0), QVariant::fromValue(search_text));
+    m_search_index_it = m_search_indexes.begin();
 
-    if (!search_indexes.isEmpty())
+    if (!m_search_indexes.isEmpty())
     {
         QModelIndex curr_idx = currentIndex();
-        if (curr_idx.isValid() && curr_idx != *search_index_it)
+        if (curr_idx.isValid() && curr_idx != *m_search_index_it)
         {
-            search_index_it = search_indexes.begin() +
-                              getNearestSearchNode((uint64_t)(curr_idx.internalPointer()));
+            m_search_index_it = m_search_indexes.begin() +
+                                getNearestSearchNode(GetNodeIndex(curr_idx));
         }
-        setAndScrollToNode(*search_index_it);
+        setAndScrollToNode(*m_search_index_it);
     }
-    emit updateSearch(search_index_it - search_indexes.begin(),
-                      search_indexes.isEmpty() ? 0 : search_indexes.size());
+    emit updateSearch(m_search_index_it - m_search_indexes.begin(),
+                      m_search_indexes.isEmpty() ? 0 : m_search_indexes.size());
 }
 
 //--------------------------------------------------------------------------------------------------
 void DiveTreeView::nextNodeInSearch()
 {
-    if (!search_indexes.isEmpty() && search_index_it != search_indexes.end() &&
-        (search_index_it + 1) != search_indexes.end())
+    if (!m_search_indexes.isEmpty() && m_search_index_it != m_search_indexes.end() &&
+        (m_search_index_it + 1) != m_search_indexes.end())
     {
         QModelIndex curr_idx = currentIndex();
-        if (curr_idx.isValid() && curr_idx != *search_index_it)
+        if (curr_idx.isValid() && curr_idx != *m_search_index_it)
         {
-            search_index_it = search_indexes.begin() +
-                              getNearestSearchNode((uint64_t)(curr_idx.internalPointer()));
-            if (*search_index_it == curr_idx)
-                ++search_index_it;
+            m_search_index_it = m_search_indexes.begin() +
+                                getNearestSearchNode(GetNodeIndex(curr_idx));
+            if (*m_search_index_it == curr_idx)
+                ++m_search_index_it;
         }
         else
         {
-            ++search_index_it;
+            ++m_search_index_it;
         }
-        setAndScrollToNode(*search_index_it);
-        emit updateSearch(search_index_it - search_indexes.begin(), search_indexes.size());
+        setAndScrollToNode(*m_search_index_it);
+        emit updateSearch(m_search_index_it - m_search_indexes.begin(), m_search_indexes.size());
     }
 }
 
 //--------------------------------------------------------------------------------------------------
 void DiveTreeView::prevNodeInSearch()
 {
-    if (!search_indexes.isEmpty() && search_index_it != search_indexes.begin())
+    if (!m_search_indexes.isEmpty() && m_search_index_it != m_search_indexes.begin())
     {
         QModelIndex curr_idx = currentIndex();
-        if (curr_idx.isValid() && curr_idx != *search_index_it)
+        if (curr_idx.isValid() && curr_idx != *m_search_index_it)
         {
-            search_index_it = search_indexes.begin() +
-                              getNearestSearchNode((uint64_t)(curr_idx.internalPointer()));
-            if (*search_index_it == curr_idx)
-                --search_index_it;
+            m_search_index_it = m_search_indexes.begin() +
+                                getNearestSearchNode(GetNodeIndex(curr_idx));
+            if (*m_search_index_it == curr_idx)
+                --m_search_index_it;
         }
         else
         {
-            --search_index_it;
+            --m_search_index_it;
         }
-        setAndScrollToNode(*search_index_it);
-        emit updateSearch(search_index_it - search_indexes.begin(), search_indexes.size());
+        setAndScrollToNode(*m_search_index_it);
+        emit updateSearch(m_search_index_it - m_search_indexes.begin(), m_search_indexes.size());
     }
 }
 
 //--------------------------------------------------------------------------------------------------
 int DiveTreeView::getNearestSearchNode(uint64_t target_index)
 {
-    auto get_internal_pointer = [this](int index) {
-        return (uint64_t)(search_indexes[index].internalPointer());
-    };
+    auto get_internal_pointer = [this](int index) { return GetNodeIndex(m_search_indexes[index]); };
 
     auto get_nearest = [this](int x, int y, uint64_t target) {
-        if (target - (uint64_t)(search_indexes[x].internalPointer()) >=
-            (uint64_t)(search_indexes[y].internalPointer()) - target)
+        if (target - GetNodeIndex(m_search_indexes[x]) >=
+            GetNodeIndex(m_search_indexes[y]) - target)
             return y;
         else
             return x;
     };
 
-    int n = search_indexes.size();
+    int n = m_search_indexes.size();
     int left = 0, right = n, mid = 0;
 
     if (target_index <= get_internal_pointer(left))

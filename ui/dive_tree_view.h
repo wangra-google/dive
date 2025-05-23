@@ -18,6 +18,7 @@
 
 #include <QList>
 #include <QListIterator>
+#include <QSortFilterProxyModel>
 #include <QStyledItemDelegate>
 #include <QTreeView>
 
@@ -30,6 +31,32 @@ namespace Dive
 class CommandHierarchy;
 class DataCore;
 };  // namespace Dive
+
+class DiveFilterModel : public QSortFilterProxyModel
+{
+    Q_OBJECT
+public:
+    enum FilterMode : uint32_t
+    {
+        kNone,
+        kBinningPassOnly,
+        kFirstTilePassOnly,
+        kBinningAndFirstTilePass,
+        kFilterModeCount
+    };
+
+    DiveFilterModel(const Dive::CommandHierarchy &command_hierarchy, QObject *parent = nullptr);
+    void SetMode(FilterMode filter_mode);
+public slots:
+    void applyNewFilterMode(FilterMode new_mode);
+
+protected:
+    bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
+
+private:
+    const Dive::CommandHierarchy &m_command_hierarchy;
+    FilterMode                    m_filter_mode = kNone;
+};
 
 //--------------------------------------------------------------------------------------------------
 class DiveTreeViewDelegate : public QStyledItemDelegate
@@ -69,6 +96,8 @@ public:
 
     void SetDataCore(Dive::DataCore *data_core) { m_data_core = data_core; }
 
+    uint64_t GetNodeIndex(const QModelIndex &index) const;
+
 public slots:
     void setCurrentNode(uint64_t node_index);
     void expandNode(const QModelIndex &index);
@@ -99,8 +128,8 @@ private:
     void setAndScrollToNode(QModelIndex &idx);
     int  getNearestSearchNode(uint64_t target_index);
 
-    QModelIndex                  curr_node_selected;
-    QList<QModelIndex>           search_indexes;
-    QList<QModelIndex>::Iterator search_index_it;
+    QModelIndex                  m_curr_node_selected;
+    QList<QModelIndex>           m_search_indexes;
+    QList<QModelIndex>::Iterator m_search_index_it;
     Dive::DataCore              *m_data_core = nullptr;
 };

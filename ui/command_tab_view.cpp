@@ -32,8 +32,11 @@
 // =================================================================================================
 // CommandTabView
 // =================================================================================================
-CommandTabView::CommandTabView(const Dive::CommandHierarchy &command_hierarchy, QWidget *parent) :
-    m_command_hierarchy(command_hierarchy)
+CommandTabView::CommandTabView(const Dive::CommandHierarchy &command_hierarchy,
+                               const DiveFilterModel  &filter_model,
+                               QWidget                      *parent) :
+    m_command_hierarchy(command_hierarchy),
+    m_filter_model(filter_model)
 {
     m_command_buffer_model = new CommandBufferModel(command_hierarchy);
     m_command_buffer_view = new CommandBufferView(command_hierarchy);
@@ -107,7 +110,9 @@ void CommandTabView::ResetModel()
 //--------------------------------------------------------------------------------------------------
 void CommandTabView::OnSelectionChanged(const QModelIndex &index)
 {
-    m_command_buffer_model->OnSelectionChanged(index);
+    QModelIndex source_index = m_filter_model.mapToSource(index);
+
+    m_command_buffer_model->OnSelectionChanged(source_index);
 
     // After m_command_buffer_view is filled out in CommandBufferModel::OnSelectionChanged(), do NOT
     // expandAll. For huge trees (e.g. 20+ million nodes), it needs to traverse all expanded nodes

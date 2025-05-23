@@ -15,6 +15,7 @@
 */
 
 #include <QFrame>
+#include "dive_tree_view.h"
 
 #pragma once
 // Forward declaration
@@ -35,7 +36,9 @@ class CommandTabView : public QFrame
     Q_OBJECT
 
 public:
-    CommandTabView(const Dive::CommandHierarchy &command_hierarchy, QWidget *parent = nullptr);
+    CommandTabView(const Dive::CommandHierarchy &command_hierarchy,
+                   const DiveFilterModel  &filter_model,
+                   QWidget                      *parent = nullptr);
 
     void SetTopologyToView(const Dive::Topology *topology_ptr);
 
@@ -62,4 +65,5 @@ private:
     SearchBar          *m_search_bar = nullptr;
 
     const Dive::CommandHierarchy &m_command_hierarchy;
+    const DiveFilterModel        &m_filter_model;
 };
