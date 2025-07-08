@@ -33,7 +33,7 @@ public:
 
     ~DiveVulkanReplayConsumer() override;
 
-    virtual void Process_vkCreateDevice(
+    void Process_vkCreateDevice(
     const ApiCallInfo&                                   call_info,
     VkResult                                             returnValue,
     format::HandleId                                     physicalDevice,
@@ -41,37 +41,37 @@ public:
     StructPointerDecoder<Decoded_VkAllocationCallbacks>* pAllocator,
     HandlePointerDecoder<VkDevice>*                      pDevice) override;
 
-    virtual void Process_vkDestroyDevice(
+    void Process_vkDestroyDevice(
     const ApiCallInfo&                                   call_info,
     format::HandleId                                     device,
     StructPointerDecoder<Decoded_VkAllocationCallbacks>* pAllocator) override;
 
-    virtual void Process_vkDestroyCommandPool(
+    void Process_vkDestroyCommandPool(
     const ApiCallInfo&                                   call_info,
     format::HandleId                                     device,
     format::HandleId                                     commandPool,
     StructPointerDecoder<Decoded_VkAllocationCallbacks>* pAllocator) override;
 
-    virtual void Process_vkAllocateCommandBuffers(
+    void Process_vkAllocateCommandBuffers(
     const ApiCallInfo&                                         call_info,
     VkResult                                                   returnValue,
     format::HandleId                                           device,
     StructPointerDecoder<Decoded_VkCommandBufferAllocateInfo>* pAllocateInfo,
     HandlePointerDecoder<VkCommandBuffer>*                     pCommandBuffers) override;
 
-    virtual void Process_vkFreeCommandBuffers(
+    void Process_vkFreeCommandBuffers(
     const ApiCallInfo&                     call_info,
     format::HandleId                       device,
     format::HandleId                       commandPool,
     uint32_t                               commandBufferCount,
     HandlePointerDecoder<VkCommandBuffer>* pCommandBuffers) override;
 
-    virtual void Process_vkResetCommandBuffer(const ApiCallInfo&        call_info,
+    void Process_vkResetCommandBuffer(const ApiCallInfo&        call_info,
                                               VkResult                  returnValue,
                                               format::HandleId          commandBuffer,
                                               VkCommandBufferResetFlags flags) override;
 
-    virtual void Process_vkResetCommandPool(const ApiCallInfo&      call_info,
+    void Process_vkResetCommandPool(const ApiCallInfo&      call_info,
                                             VkResult                returnValue,
                                             format::HandleId        device,
                                             format::HandleId        commandPool,
@@ -84,35 +84,35 @@ public:
                                StructPointerDecoder<Decoded_VkSubmitInfo>* pSubmits,
                                format::HandleId                            fence) override;
 
-    virtual void Process_vkBeginCommandBuffer(
+    void Process_vkBeginCommandBuffer(
     const ApiCallInfo&                                      call_info,
     VkResult                                                returnValue,
     format::HandleId                                        commandBuffer,
     StructPointerDecoder<Decoded_VkCommandBufferBeginInfo>* pBeginInfo) override;
 
-    virtual void Process_vkEndCommandBuffer(const ApiCallInfo& call_info,
+    void Process_vkEndCommandBuffer(const ApiCallInfo& call_info,
                                             VkResult           returnValue,
                                             format::HandleId   commandBuffer) override;
 
-    virtual void Process_vkGetDeviceQueue2(
+    void Process_vkGetDeviceQueue2(
     const ApiCallInfo&                                call_info,
     format::HandleId                                  device,
     StructPointerDecoder<Decoded_VkDeviceQueueInfo2>* pQueueInfo,
     HandlePointerDecoder<VkQueue>*                    pQueue) override;
 
-    virtual void Process_vkGetDeviceQueue(const ApiCallInfo&             call_info,
+    void Process_vkGetDeviceQueue(const ApiCallInfo&             call_info,
                                           format::HandleId               device,
                                           uint32_t                       queueFamilyIndex,
                                           uint32_t                       queueIndex,
                                           HandlePointerDecoder<VkQueue>* pQueue) override;
 
-    virtual void Process_vkCmdInsertDebugUtilsLabelEXT(
+    void Process_vkCmdInsertDebugUtilsLabelEXT(
     const ApiCallInfo&                                  call_info,
     format::HandleId                                    commandBuffer,
     StructPointerDecoder<Decoded_VkDebugUtilsLabelEXT>* pLabelInfo) override;
 
 private:
-    Dive::GPUTime m_gpu_time;
+    Dive::GPUTime gpu_time_;
 };
 
 GFXRECON_END_NAMESPACE(decode)
