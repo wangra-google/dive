@@ -261,19 +261,19 @@ bool run_package(Dive::DeviceManager& mgr,
 
     if (app_type == "openxr")
     {
-        ret = dev->SetupApp(package,
+        /*ret = dev->SetupApp(package,
                             Dive::ApplicationType::OPENXR_APK,
                             command_args,
                             device_architecture,
-                            gfxr_capture_directory);
+                            gfxr_capture_directory);*/
     }
     else if (app_type == "vulkan")
     {
-        ret = dev->SetupApp(package,
+        /*ret = dev->SetupApp(package,
                             Dive::ApplicationType::VULKAN_APK,
                             command_args,
                             device_architecture,
-                            gfxr_capture_directory);
+                            gfxr_capture_directory);*/
     }
     else if (app_type == "vulkan_cli")
     {
@@ -290,11 +290,11 @@ bool run_package(Dive::DeviceManager& mgr,
         return false;
     }
 
-    ret = dev->StartApp();
+    /*ret = dev->StartApp();
     if (!ret.ok())
     {
         std::cout << "Failed to start app, error: " << ret.message() << std::endl;
-    }
+    }*/
 
     return ret.ok();
 }

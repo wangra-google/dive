@@ -1030,6 +1030,45 @@ CaptureData::LoadResult CaptureData::LoadAdrenoRdFile(FileReader &capture_file)
         RD_CHIP_ID,
     };
 
+    std::ofstream output_file("my_test.txt");
+    auto          BlockTypeToString = [](uint32_t block_type) -> std::string {
+        switch (static_cast<rd_sect_type>(block_type))
+        {
+        case RD_NONE:
+            return "RD_NONE";
+        case RD_TEST:
+            return "RD_TEST";
+        case RD_CMD:
+            return "RD_CMD";
+        case RD_GPUADDR:
+            return "RD_GPUADDR";
+        case RD_CONTEXT:
+            return "RD_CONTEXT";
+        case RD_CMDSTREAM:
+            return "RD_CMDSTREAM";
+        case RD_CMDSTREAM_ADDR:
+            return "RD_CMDSTREAM_ADDR";
+        case RD_PARAM:
+            return "RD_PARAM";
+        case RD_FLUSH:
+            return "RD_FLUSH";
+        case RD_PROGRAM:
+            return "RD_PROGRAM";
+        case RD_VERT_SHADER:
+            return "RD_VERT_SHADER";
+        case RD_FRAG_SHADER:
+            return "RD_FRAG_SHADER";
+        case RD_BUFFER_CONTENTS:
+            return "RD_BUFFER_CONTENTS";
+        case RD_GPU_ID:
+            return "RD_GPU_ID";
+        case RD_CHIP_ID:
+            return "RD_CHIP_ID";
+        default:
+            return "UNKNOWN_BLOCK_TYPE (" + std::to_string(block_type) + ")";
+        }
+    };
+
     struct BlockInfo
     {
         uint32_t m_block_type;
@@ -1051,6 +1090,7 @@ CaptureData::LoadResult CaptureData::LoadAdrenoRdFile(FileReader &capture_file)
             if (capture_file.read((char *)&block_info, sizeof(block_info)) <= 0)
                 return LoadResult::kCorruptData;
         }
+        output_file << "Block type: " << BlockTypeToString(block_info.m_block_type) << std::endl;
 
         switch (block_info.m_block_type)
         {
@@ -1061,6 +1101,8 @@ CaptureData::LoadResult CaptureData::LoadAdrenoRdFile(FileReader &capture_file)
                                        &cur_size))
                 return LoadResult::kFileIoError;
             is_new_submit = true;
+            output_file << "Addr: 0x" << std::hex << cur_gpu_addr << ", Cur Size: " << cur_size
+                        << std::endl;
             break;
         case RD_CMDSTREAM_ADDR:
             if (!LoadCmdStreamBlockAdreno(capture_file,
@@ -1071,9 +1113,13 @@ CaptureData::LoadResult CaptureData::LoadAdrenoRdFile(FileReader &capture_file)
             is_new_submit = false;
             break;
         case RD_BUFFER_CONTENTS:
+            output_file << "Size: " << block_info.m_data_size << std::endl;
             // The size read from RD_GPUADDR should match block size exactly
             if (block_info.m_data_size != cur_size)
+            {
+                output_file.close();
                 return LoadResult::kCorruptData;
+            }
             if (!LoadMemoryBlockAdreno(capture_file, cur_gpu_addr, cur_size))
                 return LoadResult::kFileIoError;
             break;
@@ -1137,6 +1183,7 @@ CaptureData::LoadResult CaptureData::LoadAdrenoRdFile(FileReader &capture_file)
         }
     }
     m_memory.Finalize(true, true);
+    output_file.close();
     return LoadResult::kSuccess;
 }
 

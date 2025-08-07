@@ -91,6 +91,18 @@ public:
     GpuTimeStatus OnCmdInsertDebugUtilsLabelEXT(VkCommandBuffer             commandBuffer,
                                                 const VkDebugUtilsLabelEXT* pLabelInfo);
 
+    GpuTimeStatus OnCmdBeginRenderPass(VkCommandBuffer         commandBuffer,
+                              PFN_vkCmdWriteTimestamp pfnCmdWriteTimestamp);
+
+    GpuTimeStatus OnCmdEndRenderPass(VkCommandBuffer         commandBuffer,
+                            PFN_vkCmdWriteTimestamp pfnCmdWriteTimestamp);
+
+    GpuTimeStatus OnCmdBeginRenderPass2(VkCommandBuffer         commandBuffer,
+                                       PFN_vkCmdWriteTimestamp pfnCmdWriteTimestamp);
+
+    GpuTimeStatus OnCmdEndRenderPass2(VkCommandBuffer         commandBuffer,
+                                     PFN_vkCmdWriteTimestamp pfnCmdWriteTimestamp);
+
     struct Stats
     {
         double average = 0.0;
@@ -101,17 +113,32 @@ public:
     };
     Stats GetFrameTimeStats() const { return m_metrics.GetFrameTimeStats(); }
     Stats GetFrameCmdTimeStats(size_t index) const { return m_metrics.GetFrameCmdTimeStats(index); }
+    Stats GetFrameRenderPassTimeStats(size_t index) const
+    {
+        return m_metrics.GetFrameRenderPassTimeStats(index);
+    }
+    size_t GetCmdRenderPassCount(size_t index) const
+    {
+        return m_metrics.GetCmdRenderPassCount(index);
+    }
     std::string GetStatsString() const;
 
 private:
     class FrameMetrics
     {
     public:
+        static constexpr size_t kInvalidRenderPassCount = static_cast<size_t>(-1);
         FrameMetrics() = default;
-        void   AddFrameData(double frame_time, const std::vector<double> cmd_time_vec);
+        void   AddFrameData(double                     frame_time,
+                            const std::vector<double>& cmd_time_vec,
+                            const std::vector<double>& renderpass_time_vec,
+                            const std::vector<size_t>& cmd_renderpass_count_vec);
         Stats  GetFrameTimeStats() const;
         Stats  GetFrameCmdTimeStats(size_t index) const;
+        Stats  GetFrameRenderPassTimeStats(size_t index) const;
         size_t GetFrameCmdCount() const;
+        size_t GetFrameRenderPassCount() const;
+        size_t GetCmdRenderPassCount(size_t index) const;
 
     private:
         Stats  GetStatistics(const std::deque<double>& data) const;
@@ -121,7 +148,9 @@ private:
         void   Reset();
 
         std::deque<double>              m_frame_time;
+        std::vector<size_t>             m_cmd_renderpass_count_vec;
         std::vector<std::deque<double>> m_cmd_time_vec;
+        std::vector<std::deque<double>> m_renderpass_time_vec;
     };
 
     class TimeStampSlotAllocator
@@ -152,6 +181,7 @@ private:
         }
         const static uint32_t kInvalidTimeStampOffset = static_cast<uint32_t>(-1);
 
+        std::vector<uint32_t> renderpass_slots;
         VkCommandPool pool = VK_NULL_HANDLE;
         uint32_t      begin_timestamp_offset = kInvalidTimeStampOffset;
         uint32_t      end_timestamp_offset = kInvalidTimeStampOffset;
