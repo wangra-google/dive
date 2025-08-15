@@ -25,6 +25,13 @@
 
 #include "application/android_context.h"
 #include "application/android_window.h"
+
+// GOOGLE: Custom file processor for Dive
+#include "gfxr_ext/decode/dive_file_processor.h"
+
+// GOOGLE: Custom replay consumer for Dive
+#include "gfxr_ext/decode/dive_vulkan_replay_consumer.h"
+
 #include "decode/file_processor.h"
 #include "decode/preload_file_processor.h"
 #include "decode/vulkan_replay_options.h"
@@ -64,8 +71,8 @@ const char kLayerProperty[]      = "debug.vulkan.layers";
 
 const int32_t kSwipeDistance = 200;
 
-void    ProcessAppCmd(struct android_app* app, int32_t cmd);
-int32_t ProcessInputEvent(struct android_app* app, AInputEvent* event);
+void        ProcessAppCmd(struct android_app* app, int32_t cmd);
+int32_t     ProcessInputEvent(struct android_app* app, AInputEvent* event);
 
 static std::unique_ptr<gfxrecon::decode::FileProcessor> file_processor;
 
@@ -126,9 +133,17 @@ void android_main(struct android_app* app)
 
         try
         {
-            file_processor = arg_parser.IsOptionSet(kPreloadMeasurementRangeOption)
+            // GOOGLE: Initialize DiveFileProcessor instead of FileProcessor when --loop-single-frame is set
+            if (arg_parser.IsOptionSet(kLoopSingleFrame))
+            {
+                file_processor = std::make_unique<gfxrecon::decode::DiveFileProcessor>();
+            }
+            else
+            {
+                file_processor = arg_parser.IsOptionSet(kPreloadMeasurementRangeOption)
                                  ? std::make_unique<gfxrecon::decode::PreloadFileProcessor>()
                                  : std::make_unique<gfxrecon::decode::FileProcessor>();
+            }
 
             if (!file_processor->Initialize(filename))
             {
@@ -144,7 +159,19 @@ void android_main(struct android_app* app)
                 gfxrecon::decode::VulkanReplayOptions          replay_options =
                     GetVulkanReplayOptions(arg_parser, filename, &tracked_object_info_table);
 
-                gfxrecon::decode::VulkanReplayConsumer vulkan_replay_consumer(application, replay_options);
+                // GOOGLE: Pass replay options to DiveFileProcessor
+                if (arg_parser.IsOptionSet(kLoopSingleFrame) && arg_parser.IsArgumentSet(kLoopSingleFrameCount)) {
+                    auto* dive_file_processor = dynamic_cast<gfxrecon::decode::DiveFileProcessor*>(file_processor.get());
+                    GFXRECON_ASSERT(dive_file_processor)
+                    dive_file_processor->SetLoopSingleFrameCount(replay_options.loop_single_frame_count);
+                }
+
+                file_processor->SetPrintBlockInfoFlag(replay_options.enable_print_block_info,
+                                                      replay_options.block_index_from,
+                                                      replay_options.block_index_to);
+
+                // GOOGLE: replace VulkanReplayConsumer with dive specific DiveVulkanReplayConsumer
+                gfxrecon::decode::DiveVulkanReplayConsumer vulkan_replay_consumer(application, replay_options);
                 gfxrecon::decode::VulkanDecoder        vulkan_decoder;
 
                 ApiReplayOptions  api_replay_options;
