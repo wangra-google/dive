@@ -326,7 +326,7 @@ absl::Status InternalRunPackage(const CommandContext& ctx, bool enable_gfxr)
 
     absl::Status ret;
 
-    switch (ctx.options.app_type)
+    /*switch (ctx.options.app_type)
     {
         case Dive::AppType::kVulkan_OpenXR:
             ret = device->SetupApp(ctx.options.package, Dive::ApplicationType::OPENXR_APK,
@@ -361,7 +361,7 @@ absl::Status InternalRunPackage(const CommandContext& ctx, bool enable_gfxr)
     if (!ret.ok())
     {
         return Dive::StatusWithContext(ret, "Start app failed");
-    }
+    }*/
     return absl::OkStatus();
 }
 
@@ -374,10 +374,10 @@ absl::Status TriggerPm4Capture(const CommandContext& ctx)
         return Dive::FailedPreconditionError("No device selected, can't capture.");
     }
 
-    if (absl::Status ret = device->GetCurrentApplication()->IsAppRunningOnForeground(); !ret.ok())
-    {
-        return Dive::StatusWithContext(ret, "Device check failed");
-    }
+    //if (absl::Status ret = device->GetCurrentApplication()->IsAppRunningOnForeground(); !ret.ok())
+    //{
+    //    return Dive::StatusWithContext(ret, "Device check failed");
+    //}
 
     Network::TcpClient client;
     const std::string host = "127.0.0.1";
